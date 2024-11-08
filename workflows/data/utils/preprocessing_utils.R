@@ -1,4 +1,24 @@
 
+
+# Pivot data to long format -----------------------------------------------
+
+long_data <- function(data) {
+  
+  long_data = data %>% 
+    pivot_longer(
+      cols = -c(scenario, region, GHG, Units),
+      names_to = "year", 
+      values_to = "value"
+    ) %>% 
+    mutate(
+      year = as.numeric(year)
+    ) %>% 
+    select(Units, scenario, region, GHG, year, value)
+  
+  return(long_data)
+}
+
+
 # Recode scenario names ---------------------------------------------------
 
 scenario_names <-
@@ -25,25 +45,17 @@ recode_scenarios <- function(data) {
   return(data)
 }
 
+# Load GCAM Data --------------------------------------------------------
 
-# Pivot data to long format -----------------------------------------------
-
-long_data <- function(data) {
+load_gcam_data <- function(path) {
   
-  long_data = data %>% 
-    pivot_longer(
-      cols = -c(scenario, region, GHG, Units),
-      names_to = "year", 
-      values_to = "value"
-    ) %>% 
-    mutate(
-      year = as.numeric(year)
-    ) %>% 
-    select(Units, scenario, region, GHG, year, value)
+  data <- read.csv(path)
   
-  return(long_data)
+  data_long <- long_data(data)
+  
+  data_recode <- recode_scenarios(data_long)
+  
 }
-
 
 # Saving scenarios --------------------------------------------------------
 
@@ -65,4 +77,8 @@ scenario_split <- function(data, directory) {
     write.csv(scenario_split[[scenario_name]], file_path, row.names = F)
   }
   
-}
+  # return the split list 
+  return(scenario_split)
+
+  }
+
