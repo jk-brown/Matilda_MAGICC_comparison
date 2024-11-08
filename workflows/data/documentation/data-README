@@ -1,0 +1,15 @@
+README for raw and ouput data for Matilda v. MAGICC comparison
+
+data/
+|   |-- raw-data/: original, externally edited data
+
+|   |-- input/: fully processed, ready-for-analysis data
+|   |   |-- scenarios/: procssed data for each scenario saved as csv
+
+|   |-- output/: results from analysis
+
+|   |-- documentation/: README and data dictionary
+
+|   |-- utils/: utilities for processing data
+
+|   |-- scripts/: .R files for processing raw data
