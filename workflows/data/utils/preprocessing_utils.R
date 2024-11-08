@@ -49,7 +49,7 @@ recode_scenarios <- function(data) {
 
 load_gcam_data <- function(path) {
   
-  data <- read.csv(path)
+  data <- read.csv(path, check.names = F)
   
   data_long <- long_data(data)
   
