@@ -66,7 +66,7 @@ get_hector_emissions <- function(gcam_emissions_data){
   
   # 2 Halocarbon ghgs can be aggregated into a single halocarbon category
   sum_halocarbon <- gcam_emissions_map[, list(value = sum(converted_value)), 
-                                       by = c("agg.gas", "hector.name", "year", "hector.units")]
+                                       by = c("scenario", "agg.gas", "hector.name", "year", "hector.units")]
   
   # omit NAs from the halocarbon aggregate
   gcam_emissions_input <- na.omit(sum_halocarbon)
@@ -78,7 +78,7 @@ get_hector_emissions <- function(gcam_emissions_data){
   }
   
   # establish data years; 2005:2100. Before 2005 Hector uses GCAM inputs
-  data_years <- data.table(year = 2005:2100)
+  data_years <- data.table(year = 1990:2100)
   
   # TODO: Is there a better way to do the following lines?
   # Construct data frame of all the variables for the 2005:2100 year range.
@@ -107,7 +107,9 @@ get_hector_emissions <- function(gcam_emissions_data){
   return(hector_emissions)
 }
 
-test_h_emissions <- get_hector_emissions(test_df)
+
+# EXTRA -------------------------------------------------------------------
+#consider adding as a function to check the emissions that are present in GCAM data that are not in Hector map.
 
 # Identify values in df1$ghg that are not in df2$ghg
 unique_values_not_in_df2 <- test_df$ghg[!test_df$ghg %in% hector_emiss$ghg]
