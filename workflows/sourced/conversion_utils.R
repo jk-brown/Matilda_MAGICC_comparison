@@ -1,6 +1,30 @@
 ## Functions for converting GCAM emissions output to Hector input. 
 
-# 1 converting GCAM emissions to Hector emissions -------------------------
+
+# 1 Repeat add columns ----------------------------------------------------
+
+# data.table implementation of the gcamdata repeat_add_columns
+# Args 
+#   x: data.table to add to 
+#   y: data.table containing the column that should be repeated and added to dt x
+# return: data.table
+repeat_add_columns <- function(x, y){
+  
+  assert_that(is.data.table(x))
+  assert_that(is.data.table(y))
+  assert_that(!any(names(x) %in% names(y)))
+  assert_that(!any(names(y) %in% names(x)))
+  
+  x$join <- 1
+  y$join <- 1
+  
+  df <- merge(x, y, all = TRUE, by = .EACHI, allow.cartesian=TRUE)
+  df$join <- NULL
+  return(df)
+  
+}
+
+# 2 converting GCAM emissions to Hector emissions -------------------------
 
 get_hector_emissions <- function(gcam_emissions_data){
 

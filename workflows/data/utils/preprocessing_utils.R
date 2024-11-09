@@ -42,6 +42,9 @@ recode_scenarios <- function(data) {
     "T_06_NDC_cont,date=2021-22-9T19:23:28+17:00" = scenario_names[6],
     "T_07_NDC_incr_LTS,date=2021-22-9T19:23:28+17:00" = scenario_names[7])
   
+  data <- data %>% 
+    rename(ghg = GHG)
+  
   return(data)
 }
 
