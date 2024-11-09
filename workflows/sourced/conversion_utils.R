@@ -37,7 +37,7 @@ get_hector_emissions <- function(gcam_emissions_data){
   #                               FUN = sum)
   
   # Global data 
-  global_emissions <- gcam_emisisons_data
+  global_emissions <- gcam_emissions_data
   
   # get emissions mapping information
   emissions_map <- read.csv("workflows/data/raw-data/GCAM_hector_emissions_map.csv") 
@@ -52,7 +52,7 @@ get_hector_emissions <- function(gcam_emissions_data){
   # Expect NAs for:  H2, H2_AWB, PM10, PM2.5, and I think CO2_FUG
   # TODO: what to do in CO2_FUG situation
   missing_ghgs <- unique(gcam_emissions_map[is.na(gcam_emissions_map$agg.gas), ]$ghg)
-  expected_missing_ghgs <- c("H2", "H2_AWB", "PM10", "PM2.5")
+  expected_missing_ghgs <- c("H2", "H2_AWB")
   
   # check for the presence of expected_missing_ghgs in missing_ghgs.
   # if any of the expected missing ghgs are not found in missing_ghgs, send an error. 
@@ -99,7 +99,7 @@ get_hector_emissions <- function(gcam_emissions_data){
     setDT()
   
   # construct final output
-  hector_emissions <- approximated_emissions[, .(scenario = "GCAM",
+  hector_emissions <- approximated_emissions[, .(scenario = scenario,
                                                  variable = hector.name,
                                                  year = year,
                                                  value = value,
@@ -107,4 +107,13 @@ get_hector_emissions <- function(gcam_emissions_data){
   return(hector_emissions)
 }
 
+test_h_emissions <- get_hector_emissions(test_df)
 
+# Identify values in df1$ghg that are not in df2$ghg
+unique_values_not_in_df2 <- test_df$ghg[!test_df$ghg %in% hector_emiss$ghg]
+
+# Get unique values
+unique_values_not_in_df2 <- unique(unique_values_not_in_df2)
+
+# Print the result
+unique_values_not_in_df2
