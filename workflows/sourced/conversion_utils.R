@@ -30,6 +30,7 @@ get_hector_emissions <- function(gcam_emissions_data){
 
   # TODO: Add this with as an option -- only needs to be done if the GCAM data are 
   # broken out by landleaf.
+  # 
   # pull out the emissions data from the dat_file
   # gcam_df <- gcam_data$GCAM$`all emissions by region`
   # 
@@ -109,6 +110,56 @@ get_hector_emissions <- function(gcam_emissions_data){
   return(hector_emissions)
 }
 
+
+# 3 converting GCAM LUC emissions to Hector  ------------------------------
+
+get_luc_emissions <- function(gcam_emissions_file) {
+  
+  # # Check that the gcam data file exists
+  # assertthat::assert_that(file.exists(gcam_emissions_file))
+  # 
+  # # load gcam project from dat_file
+  # gcam_proj <- loadProject(gcam_emissions_file)
+  
+  # # extract the luc_emissions from gcam_emissions_file
+  # luc_df <- gcam_proj$GCAM$`LUC emissions by region`
+  # luc_df$variable <- "luc_emissions"
+  
+  # copy over data
+  luc_df <- gcam_emissions_file
+  luc_df$variable <- "luc_emissions"
+  
+  # convert gcam luc_emissions to hector luc_emissions
+  luc_df$units <- "Pg C/yr"
+  conv.factor <- 0.001 # From MT C/yr to Pg C/yr
+  luc_df$converted_value <- luc_df$value * conv.factor
+  
+  # Aggregate regions to global luc_emissions for Hector
+  global_luc <- luc_df %>%
+    group_by(scenario, variable, year, units) %>%
+    summarize(value = sum(converted_value)) %>%
+    ungroup()
+  
+  # Expected years for the Hector luc_emissions will be from 2005:2100
+  # wait...am I not using this anywhere?
+  expected_years <- 2005:2100
+  
+  # create rows for years not in gcam data
+  annual_luc <- global_luc %>% 
+    complete(year = 1975:2100, # use complete() to get complete years in the df and fill with NAs
+             nesting(scenario, variable, units), 
+             fill = list(value = NA)) %>% 
+    filter(year > 1989) %>% 
+    # only interested in 2005 -- before 2005 Hector uses gcam emissions?
+    # TODO: get confirmation about filtering in line 152
+    mutate(value = ifelse(is.na(value), 
+                          approx(year, value, xout = year, rule = 2)$y,
+                          value)) %>% 
+    ungroup() %>% 
+    select(scenario, variable, year, value, units)
+  
+  return(annual_luc)
+}
 
 # EXTRA -------------------------------------------------------------------
 #consider adding as a function to check the emissions that are present in GCAM data that are not in Hector map.
