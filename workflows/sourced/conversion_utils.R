@@ -1,6 +1,5 @@
 ## Functions for converting GCAM emissions output to Hector input. 
 
-
 # 1 Repeat add columns ----------------------------------------------------
 
 # data.table implementation of the gcamdata repeat_add_columns
