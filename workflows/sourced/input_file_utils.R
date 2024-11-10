@@ -47,7 +47,7 @@ build_emissions_constraints <- function(hector_emissions_df) {
 }
 
 
-# 2 Editing input document (ini file) -------------------------------------
+# 2 Editing input document - used to write ini file -------------------------------------
 
 build_emissions_input_file <- function(new_constraint_file,
                                        editable_constraint_file = "workflows/data/raw-data/emissions_constraints_editable.csv",
