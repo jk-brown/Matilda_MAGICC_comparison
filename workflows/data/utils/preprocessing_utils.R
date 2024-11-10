@@ -1,8 +1,8 @@
 
 
-# Pivot data to long format -----------------------------------------------
+# Pivot GHG emissions data to long format -----------------------------------------------
 
-long_data <- function(data) {
+long_emissions_data <- function(data) {
   
   long_data = data %>% 
     pivot_longer(
@@ -19,6 +19,24 @@ long_data <- function(data) {
 }
 
 
+# Pivot LUC data to long format -----------------------------------------------------------
+
+long_luc_data <- function(data) {
+  
+  long_data = data %>% 
+    pivot_longer(
+      cols = -c(scenario, region, Units),
+      names_to = "year", 
+      values_to = "value"
+    ) %>% 
+    mutate(
+      year = as.numeric(year)
+    ) %>% 
+    select(Units, scenario, region, year, value)
+  
+  return(long_data)
+}
+
 # Recode scenario names ---------------------------------------------------
 
 scenario_names <-
@@ -30,7 +48,7 @@ scenario_names <-
     "T_06_NDC_cont", 
     "T_07_NDC_inc_LTS")
 
-recode_scenarios <- function(data) {
+recode_ghg_scenarios <- function(data) {
   
   data$scenario <- recode_factor(
     data$scenario,
@@ -48,15 +66,40 @@ recode_scenarios <- function(data) {
   return(data)
 }
 
-# Load GCAM Data --------------------------------------------------------
+recode_luc_scenarios <- function(data) {
+  
+  data$scenario <- recode_factor(
+    data$scenario,
+    "T_01_BAU,date=2021-22-9T19:23:29+17:00" = scenario_names[1],
+    "T_02_CAT_crnt,date=2021-22-9T19:23:29+17:00" = scenario_names[2],
+    "T_03_CAT_cont,date=2021-22-9T19:23:29+17:00" = scenario_names[3],
+    "T_04_NDC_cont,date=2021-22-9T19:23:29+17:00" = scenario_names[4],
+    "T_05_NDC_incr_LTS,date=2021-22-9T19:23:28+17:00" = scenario_names[5],
+    "T_06_NDC_cont,date=2021-22-9T19:23:28+17:00" = scenario_names[6],
+    "T_07_NDC_incr_LTS,date=2021-22-9T19:23:28+17:00" = scenario_names[7])
+  
+  return(data)
+}
 
-load_gcam_data <- function(path) {
+# Load Data Functions --------------------------------------------------------
+
+load_ghg_data <- function(path) {
   
   data <- read.csv(path, check.names = F)
   
-  data_long <- long_data(data)
+  data_long <- long_ghg_data(data)
   
-  data_recode <- recode_scenarios(data_long)
+  data_recode <- recode_ghg_scenarios(data_long)
+  
+}
+
+load_luc_data <- function(path) {
+  
+  data <- read.csv(path, check.names = F)
+  
+  data_long <- long_luc_data(data)
+  
+  data_recode <- recode_luc_scenarios(data_long)
   
 }
 

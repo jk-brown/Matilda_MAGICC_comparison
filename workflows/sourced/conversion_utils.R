@@ -28,6 +28,8 @@ repeat_add_columns <- function(x, y){
 
 get_hector_emissions <- function(gcam_emissions_data){
 
+  # TODO: Add this with as an option -- only needs to be done if the GCAM data are 
+  # broken out by landleaf.
   # pull out the emissions data from the dat_file
   # gcam_df <- gcam_data$GCAM$`all emissions by region`
   # 
