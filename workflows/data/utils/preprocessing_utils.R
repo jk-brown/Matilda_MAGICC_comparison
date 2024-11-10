@@ -25,7 +25,7 @@ long_luc_data <- function(data) {
   
   long_data = data %>% 
     pivot_longer(
-      cols = -c(scenario, region, Units),
+      cols = -c(scenario, region, Units, LandLeaf),
       names_to = "year", 
       values_to = "value"
     ) %>% 
