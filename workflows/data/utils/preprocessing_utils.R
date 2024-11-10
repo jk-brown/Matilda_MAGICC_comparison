@@ -2,7 +2,7 @@
 
 # Pivot GHG emissions data to long format -----------------------------------------------
 
-long_emissions_data <- function(data) {
+long_ghg_data <- function(data) {
   
   long_data = data %>% 
     pivot_longer(
