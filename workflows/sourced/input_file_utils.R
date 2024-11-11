@@ -4,7 +4,7 @@
 # 1 Creating emission constraints document (csv) --------------------------
 
 build_emissions_constraints_data <- function(hector_emissions_df, 
-                                             directory = "workflows/data/input/emissions_constraints_data") {
+                                             directory = "workflows/data/input/tables/raw-emissions_constraints") {
   
   # create a directory if one does not already exist
   if (!dir.exists(directory)) {
@@ -54,8 +54,8 @@ build_emissions_constraints_data <- function(hector_emissions_df,
   # define file path 
   file_path = file.path(directory, paste0(scenario_name, ".csv"))
   
-  # write the updated data to a new csv file
-  write.csv(emissions_constraint_update, file_path, row.names = F)
+  # # write the updated data to a new csv file
+  # write.csv(emissions_constraint_update, file_path, row.names = F)
 }
 
 
@@ -63,7 +63,7 @@ build_emissions_constraints_data <- function(hector_emissions_df,
 
 write_emissions_constraints_file <- function(new_constraint_file,
                                              editable_constraint_file = "workflows/data/raw-data/emissions_constraints_editable.csv",
-                                             directory = "workflows/data/input/emissions_constraints_file") {
+                                             directory = "workflows/data/input/tables/emissions_constraints") {
   
   # Check that the hector emissions file exists
   assertthat::assert_that(file.exists(new_constraint_file), msg = "A Hector emissions files does not exist.")
