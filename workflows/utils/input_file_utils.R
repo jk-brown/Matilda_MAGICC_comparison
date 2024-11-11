@@ -54,8 +54,8 @@ build_emissions_constraints_data <- function(hector_emissions_df,
   # define file path 
   file_path = file.path(directory, paste0(scenario_name, ".csv"))
   
-  # # write the updated data to a new csv file
-  # write.csv(emissions_constraint_update, file_path, row.names = F)
+  # write the updated data to a new csv file
+  write.csv(emissions_constraint_update, file_path, row.names = F)
 }
 
 
