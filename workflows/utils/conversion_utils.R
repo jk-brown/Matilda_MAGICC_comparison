@@ -42,7 +42,7 @@ get_hector_emissions <- function(gcam_emissions_data){
   global_emissions <- gcam_emissions_data
   
   # get emissions mapping information
-  emissions_map <- read.csv("workflows/data/raw-data/GCAM_hector_emissions_map.csv") 
+  emissions_map <- read.csv("data/raw-data/GCAM_hector_emissions_map.csv") 
   
   # merge emissions_map with global_emissions
   gcam_emissions_map <- merge(global_emissions, emissions_map, 
