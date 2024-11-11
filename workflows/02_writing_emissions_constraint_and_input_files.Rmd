@@ -1,0 +1,62 @@
+---
+title: "02-Writing emissions constraints and input files"
+author: "Joe Brown"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goal
+
+The goal of this step in the workflow is to use the emissions constraint data located in `input/tables/raw-emissions_constraints` to write finalized emission constraint files (with headers) and then use them to write an input file for each scenario.
+
+## Write emissions constraints files with headers
+
+Create a list of files containing paths to raw emissions files: 
+
+```{r, create a list of emissions constraint files}
+emissions_directory <- "data/input/tables/raw-emissions_constraints/"
+
+emissions_list <- list.files(emissions_directory, full.names = T)
+
+```
+
+Write emissions constraint files with headers for each file in emissions list:
+
+```{r, write and save emissions constraints files with headers, results='hide'}
+lapply(emissions_list, function(scenario) {
+  
+  # write emissions constraint file
+  write_emissions_constraints_file(scenario)
+  
+})
+
+```
+
+New files are save in `input/tables/emissions_constraints`.
+
+## Write emissions input files for Hector
+
+Create a list of files containing paths to prepped emissions constraints files:
+
+```{r, create a list of emissions constraints files, results='hide'}
+constraints_directory <- "data/input/tables/emissions_constraints/"
+
+emissions_constraints_list <- list.files(constraints_directory, full.names = T)
+
+```
+
+Write new input files using each emissions constraints file in the file list:
+```{r, write new input files}
+lapply(emissions_constraints_list, function(scenario) {
+  
+  # write input file 
+  write_emissions_input_file(scenario)
+  
+})
+
+```
+

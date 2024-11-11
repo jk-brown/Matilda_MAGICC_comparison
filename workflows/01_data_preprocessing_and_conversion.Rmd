@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Goal
 
-The goal of this step im the workflow is to load and pre-process emissions data from the NDC experiment.
+The goal of this step in the workflow is to load and pre-process emissions data from the NDC experiment.
 
 ## Source utils 
 
