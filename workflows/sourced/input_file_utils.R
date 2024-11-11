@@ -3,7 +3,7 @@
 
 # 1 Creating emission constraints document (csv) --------------------------
 
-build_emissions_constraints <- function(hector_emissions_df) {
+build_emissions_constraints_data <- function(hector_emissions_df) {
   
   # load in constraint csv file 
   constraints_data <- read.csv("workflows/data/raw-data/emissions_constraints_editable.csv", 
@@ -47,15 +47,20 @@ build_emissions_constraints <- function(hector_emissions_df) {
 }
 
 
-# 2 Editing input document - used to write ini file -------------------------------------
+# 2 Editing emissions constraint document - used to write ini file -------------------------------------
 
-build_emissions_input_file <- function(new_constraint_file,
-                                       editable_constraint_file = "workflows/data/raw-data/emissions_constraints_editable.csv",
-                                       directory) {
+build_emissions_constraints_file <- function(new_constraint_file,
+                                             editable_constraint_file = "workflows/data/raw-data/emissions_constraints_editable.csv",
+                                             directory) {
   
   # Check that the hector emissions file exists
   assertthat::assert_that(file.exists(new_constraints_file), msg = "A Hector emissions files does not exist.")
-  
+ 
+  # create a directory if one does not already exist
+  if (!dir.exists(directory)) {
+    dir.create(directory, recursive = T)
+  } 
+   
   # Read the first five lines of the original emissions constraint data
   header <- readLines(editable_constraint_file, n = 5)
   
@@ -72,11 +77,43 @@ build_emissions_input_file <- function(new_constraint_file,
   # change first line to match new emissions information
   new_emissions_data <- gsub("ssp119 from rcmip", paste0(scenario_name, "_NDC_Exp"), new_emissions_data)
   
-  # check to see if the directory exists 
-  assert_that(dir.exists(directory), msg = "Directory does not exist.")
-
   # write new lines and save
   file_path = file.path(directory, base_name)
   writeLines(new_emissions_data, file_path)
   
+}
+
+
+# 3 Function to build input file ------------------------------------------
+
+build_input_file <- function(emissions_constraint_file_path, 
+                             editable_input_file = system.file("input/hector_ssp119.ini", package = "hector"), 
+                             directory) {
+  
+  # create a directory if one does not already exist
+  if (!dir.exists(directory)) {
+    dir.create(directory, recursive = T)
+  } 
+  
+  # check that files constraint file exists
+  assertthat::assert_that(file.exists(emissions_constraint_file_path),
+                          msg = "Emissions constraint file specified does not exist.")
+  
+  # Read lines of the editable emissions input file
+  original_input_file <- readLines(editable_input_file)
+  
+  # substitute new emissions constraint path for original emissions constraint path
+  new_input_file <- gsub("csv:tables/ssp119_emiss-constraints_rf.csv", 
+                         paste0("csv:", emissions_constraint_file_path), 
+                         original_input_file)
+  # substitute scenario name from the new emissions constraint file path
+  new_input_file <- gsub("ssp119", 
+                         tools::file_path_sans_ext(basename(emissions_constraint_file_path)), 
+                         new_input_file)
+  
+  # write lines for the new emissions input file
+  base_name = basename(emissions_constraint_file_path)
+  file_path = file.path(directory, paste0(base_name, ".ini"))
+  writeLines(new_input_file, file_path)
+
 }
