@@ -18,9 +18,17 @@ The goal of this document is to run Hector with Matilda using NDC emissions scen
 Build input file list of all the NDC experimental scenarios:
 
 ```{r, list files in ini directory}
-ini_file_directory <- "data/input/ini/"
+input_file_directory <- "data/input/ini/"
 
-input_files <- list.files(ini_file_directory)
+input_files <- list.files(input_file_directory)
+
+input_file_list <- list(T_01_BAU = paste0(input_file_directory, input_files[1]),
+                    T_02_CAT_crnt = paste0(input_file_directory, input_files[2]), 
+                    T_03_CAT_crnt = paste0(input_file_directory, input_files[3]),
+                    T_04_NDC_cont = paste0(input_file_directory, input_files[4]), 
+                    T_05_NDC_inc_LTS = paste0(input_file_directory, input_files[5]), 
+                    T_06_NDC_cont = paste0(input_file_directory, input_files[6]),
+                    T_07_NDC_inc_LTS = paste0(input_file_directory, input_files[7]))
 
 ```
 
@@ -120,5 +128,7 @@ test_NDC_file <- list(NDC = paste0(test_dir, "T_01_BAU.ini"))
 
 core <- newcore(test_NDC_file$NDC)
 
+test_result <- run(core)
+result <- fetchvars(core, 1990:2100)
 ```
 
