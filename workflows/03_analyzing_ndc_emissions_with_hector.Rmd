@@ -27,8 +27,8 @@ input_file_list <- list(T_01_BAU = paste0(input_file_directory, input_files[1]),
                     T_03_CAT_crnt = paste0(input_file_directory, input_files[3]),
                     T_04_NDC_cont = paste0(input_file_directory, input_files[4]), 
                     T_05_NDC_inc_LTS = paste0(input_file_directory, input_files[5]), 
-                    T_06_NDC_cont = paste0(input_file_directory, input_files[6]),
-                    T_07_NDC_inc_LTS = paste0(input_file_directory, input_files[7]))
+                    T_06_NDC_cont = paste0(input_file_directory, input_files[6]))
+                    #T_07_NDC_inc_LTS = paste0(input_file_directory, input_files[7]))
 
 ```
 
@@ -65,7 +65,7 @@ param_chunks <- split(params, 1:10)
 cluster <- makeCluster(detectCores() - 1)
 
 # export functions and objects to the core
-clusterExport(cluster, c("input_files", 
+clusterExport(cluster, c("input_file_list", 
                          "param_chunks", 
                          "newcore", 
                          "reset", 
@@ -77,15 +77,12 @@ clusterExport(cluster, c("input_files",
 ```{r, run the model with each ini file}
 
 # run the model 
-time_start = proc.time()
+time_start = Sys.time()
 
-m_result <- parLapply(cluster, names(input_files), function(scenario_name){
+model_result <- parLapply(cluster, names(input_file_list), function(scenario_name){
 
   # extract scenario information 
-  scenario <- input_files[[scenario_name]]
-  
-  # reset core for each iteration
-  reset(core)
+  scenario <- input_file_list[[scenario_name]]
   
   # initialize a model core for the current scenario
   core <- newcore(scenario, name = scenario_name)
@@ -102,6 +99,9 @@ m_result <- parLapply(cluster, names(input_files), function(scenario_name){
                                 "ocean_uptake"))
   })
   
+  # reset core for each iteration
+  reset(core)
+  
   # Convert run_number to continuous among chunks 
   for (i in 2:length(result_list)) {
     
@@ -113,22 +113,21 @@ m_result <- parLapply(cluster, names(input_files), function(scenario_name){
     
   }
   
-  return(result_list)
+  bind_result <- do.call(rbind, result_list)
+  
+  return(bind_result)
   
 })
 
-time_end = proc.time() - time_start
+time_end = Sys.time() - time_start
 
 ```
 
+
+Save the result:
 ```{r}
-# test single Hector run
-test_dir <- paste0("data/input/ini", "/")
-test_NDC_file <- list(NDC = paste0(test_dir, "T_01_BAU.ini"))
+# save result as .RDS file
+saveRDS(model_result, "data/output/model_result.RDS")
 
-core <- newcore(test_NDC_file$NDC)
-
-test_result <- run(core)
-result <- fetchvars(core, 1990:2100)
 ```
 
