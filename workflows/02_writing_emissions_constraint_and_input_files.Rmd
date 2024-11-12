@@ -50,7 +50,7 @@ emissions_constraints_list <- list.files(constraints_directory, full.names = T)
 ```
 
 Write new input files using each emissions constraints file in the file list:
-```{r, write new input files}
+```{r, write new input files, results='hide'}
 lapply(emissions_constraints_list, function(scenario) {
   
   # write input file 
