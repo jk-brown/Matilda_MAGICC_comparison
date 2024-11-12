@@ -29,7 +29,7 @@ build_emissions_constraints_data <- function(hector_emissions_df,
     original_emission <- grep(emission, colnames(constraints_data))
     
     # if the emission species is found, match the date to the corresponding year in hector_emissions_df
-    if( length(original_emission > 0)) {
+    if( length(original_emission) > 0) {
       values_hector_emissions <- hector_emissions_df$value[hector_emissions_df$variable == emission]
       years_hector_emissions <- hector_emissions_df$year[hector_emissions_df$variable == emission]
       
@@ -48,6 +48,24 @@ build_emissions_constraints_data <- function(hector_emissions_df,
     }
   }
   
+  # Apply negative luc_emissions rule: If luc_emissions is negative, make positive and add to luc_uptake
+  emissions_constraint_update <- emissions_constraint_update %>%
+    mutate(
+      # if luc_emissions < 0 add abs to to luc_uptake, else give the luc_uptake values.
+      luc_emissions = ifelse(luc_emissions < 0, 0, luc_emissions),
+      # if the original luc_emissions < 0, add abs luc emissions value to luc_uptake.
+      luc_uptake = ifelse(emissions_constraint_update$luc_emissions < 0, 
+                             luc_uptake + abs(emissions_constraint_update$luc_emissions), luc_uptake)
+    )
+  
+  # Apply negative ffi_emissions rule: If ffi_emissions is negative, make positive and add to daccs_uptake
+  emissions_constraint_update <- emissions_constraint_update %>% 
+    mutate(
+      ffi_emissions = ifelse(ffi_emissions < 0, 0, ffi_emissions),
+      daccs_uptake = ifelse(emissions_constraint_update$ffi_emissions < 0, 
+                              daccs_uptake + abs(emissions_constraint_update$ffi_emissions), daccs_uptake)
+    )
+
   # identify scenario name
   scenario_name <- unique(hector_emissions_df$scenario)
   
