@@ -27,8 +27,8 @@ input_file_list <- list(T_01_BAU = paste0(input_file_directory, input_files[1]),
                     T_03_CAT_crnt = paste0(input_file_directory, input_files[3]),
                     T_04_NDC_cont = paste0(input_file_directory, input_files[4]), 
                     T_05_NDC_inc_LTS = paste0(input_file_directory, input_files[5]), 
-                    T_06_NDC_cont = paste0(input_file_directory, input_files[6]))
-                    #T_07_NDC_inc_LTS = paste0(input_file_directory, input_files[7]))
+                    T_06_NDC_cont = paste0(input_file_directory, input_files[6]),
+                    T_07_NDC_inc_LTS = paste0(input_file_directory, input_files[7]))
 
 ```
 
@@ -43,7 +43,7 @@ Use the NDC ini list to run Hector with the Matilda workflow.
 set.seed(123)
 
 # set sample size for param generation
-n = 10
+n = 1000
 
 # initiate a core that can be used to generate parameters -- here we will use SSP2-4.5
 param_core <- newcore(system.file("input/hector_ssp245.ini", package = "hector"))
