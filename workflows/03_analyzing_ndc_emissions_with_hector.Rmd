@@ -123,6 +123,11 @@ time_end = Sys.time() - time_start
 
 ```
 
+Add names to the new list
+```{r}
+names(model_result) <- names(input_file_list)
+```
+
 
 Save the result:
 ```{r}
@@ -135,6 +140,92 @@ saveRDS(model_result, "data/output/model_result.RDS")
 
 ```{r score model runs}
 
+model_scores <- lapply(model_result, function(df) {
+  
+  temp_wt <- score_runs(df, criterion_temp, score_bayesian, sigma = gmst_unc)
+  temp_wt <- na.omit(temp_wt)
+  
+  co2_wt <- score_runs(df, criterion_co2_obs(), score_bayesian, sigma = co2_unc)
+  co2_wt <- na.omit(co2_wt)
+  
+  ocean_uptake_wt <- score_runs(df, criterion_ocean_uptake, score_bayesian, sigma = ocean_uptake_unc)
+  ocean_uptake_wt <- na.omit(ocean_uptake_wt)
+  
+  score_list <- list(temp_wt, co2_wt, ocean_uptake_wt)
+  
+  mc_score <- multi_criteria_weighting(score_list, criterion_weights = c(0.6, 0.25, 0.15))
+  
+  return(mc_score)
+})
+
+```
+
+merge model weights with model results (for plotting later):
+```{r}
+weighted_ensemble <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number")
+  
+  return(merged)
+  
+}, model_result, model_scores)
+
+```
+
+### Get normalized temperature (global_tas values)
+
+Normalize temperature to pre-industrial reference period 1850-1900:
+
+```{r, get normalized temperature results}
+gsat_data <- lapply(weighted_ensemble, function(df) {
+  
+  global_tas_data = subset(df, variable == "global_tas"
+                           & year > 1849
+                           & year < 2101)
+  
+  normalized_values = normalize_dat(global_tas_data, 
+                                    ref_start = 1850, 
+                                    ref_end = 1900)
+  
+  global_tas_data$value <- normalized_values
+  
+  return(global_tas_data)
+  
+})
+```
+
+### Define metrics of interest
+
+```{r define metric for end kof century warming}
+warming_metric <- new_metric(var = "global_tas", years = 2090:2100, op = median)
+  
+```
+
+### Compute warming results 
+```{r compute warming metrics}
+warming_results <- lapply(gsat_data, function(df) {
+  
+  metric_result <- metric_calc(df, warming_metric)
+  
+  return(metric_result)
+})
+```
+
+Merge metric values with model scores:
+```{r build weighted metric dfs}
+weighted_gsat_data <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number")
+  
+  return(merged)
+  
+}, warming_results, model_scores)
+
+```
+
+save weighted metric data:
+```{r save weighterd metric data}
+saveRDS(weighted_gsat_data)
 
 ```
 
