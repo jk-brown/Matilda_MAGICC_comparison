@@ -23,3 +23,21 @@ normalize_dat <- function(data, ref_start, ref_end) {
   # Return the normalized data
   return(norm_dat)
 }
+
+
+# 3 Get data summary ------------------------------------------------------
+
+data_summary <- function(data){
+  
+  gsat_metric_stats <-
+    data %>%
+    group_by(year) %>%
+    summarize(
+      median = weighted.quantile(metric_result, w = mc_weight, probs = 0.1),
+      lower = weighted.quantile(metric_result, w = mc_weight, probs = 0.05),
+      upper = weighted.quantile(metric_result, w = mc_weight, probs = 0.90),
+      .groups = "drop")
+  
+  return(gsat_metric_stats)
+  
+}

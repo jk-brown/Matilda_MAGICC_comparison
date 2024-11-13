@@ -22,7 +22,7 @@ source("utils/source_all.R")
 
 ## Load in NDC experiment data 
 
-```{r}
+```{r, load emissions data from NDC experiment}
 # GHG emissions
 ndc_ghg_emissions <- load_ghg_data("data/raw-data/global_emissions.csv")
 
