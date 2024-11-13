@@ -80,7 +80,7 @@ get_hector_emissions <- function(gcam_emissions_data){
   }
   
   # establish data years; 2005:2100. Before 2005 Hector uses GCAM inputs
-  data_years <- data.table(year = 2005:2100)
+  data_years <- data.table(year = 1990:2100)
   
   # TODO: Is there a better way to do the following lines?
   # Construct data frame of all the variables for the 2005:2100 year range.
@@ -141,14 +141,14 @@ get_luc_emissions <- function(gcam_emissions_file) {
   
   # Expected years for the Hector luc_emissions will be from 2005:2100
   # wait...am I not using this anywhere?
-  expected_years <- 2005:2100
+  expected_years <- 1990:2100
   
   # create rows for years not in gcam data
   annual_luc <- global_luc %>% 
     complete(year = 1975:2100, # use complete() to get complete years in the df and fill with NAs
              nesting(scenario, variable, units), 
              fill = list(value = NA)) %>% 
-    filter(year > 2005) %>% 
+    filter(year > 1989) %>% 
     # only interested in 2005 -- before 2005 Hector uses gcam emissions?
     # TODO: get confirmation about filtering in line 152
     mutate(value = ifelse(is.na(value), 
