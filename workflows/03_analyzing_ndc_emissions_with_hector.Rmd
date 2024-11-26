@@ -1,0 +1,231 @@
+---
+title: "03-Running Hector with NDC emissions input"
+author: "Joe Brown"
+date: "2024-11-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goal
+
+The goal of this document is to run Hector with Matilda using NDC emissions scenarios to compare with results from MAGICC7 used in Ou and Iyer 2021.
+
+## Build list of input files
+
+Build input file list of all the NDC experimental scenarios:
+
+```{r, list files in ini directory}
+input_file_directory <- "data/input/ini/"
+
+input_files <- list.files(input_file_directory)
+
+input_file_list <- list(T_01_BAU = paste0(input_file_directory, input_files[1]),
+                    T_02_CAT_crnt = paste0(input_file_directory, input_files[2]), 
+                    T_03_CAT_crnt = paste0(input_file_directory, input_files[3]),
+                    T_04_NDC_cont = paste0(input_file_directory, input_files[4]), 
+                    T_05_NDC_inc_LTS = paste0(input_file_directory, input_files[5]), 
+                    T_06_NDC_cont = paste0(input_file_directory, input_files[6]),
+                    T_07_NDC_inc_LTS = paste0(input_file_directory, input_files[7]))
+
+```
+
+## Matilda workflow
+
+Use the NDC ini list to run Hector with the Matilda workflow.
+
+### Build parameter set
+
+```{r, construct perturbed parameter set}
+# set seed for replication
+set.seed(123)
+
+# set sample size for param generation
+n = 1000
+
+# initiate a core that can be used to generate parameters -- here we will use SSP2-4.5
+param_core <- newcore(system.file("input/hector_ssp245.ini", package = "hector"))
+
+# generate param set
+params <- generate_params(core = param_core,
+                          draws = n)
+
+```
+
+### Split jobs for parallel processing
+
+```{r, split params into chunks and prepare cluster}
+# splitting params df into chunks
+param_chunks <- split(params, 1:10)
+
+# prep cluster
+# initiate a cluster
+cluster <- makeCluster(detectCores() - 1)
+
+# export functions and objects to the core
+clusterExport(cluster, c("input_file_list", 
+                         "param_chunks", 
+                         "newcore", 
+                         "reset", 
+                         "iterate_model"))
+
+```
+
+### Run the model
+```{r, run the model with each ini file}
+
+# run the model 
+time_start = Sys.time()
+
+model_result <- parLapply(cluster, names(input_file_list), function(scenario_name){
+
+  # extract scenario information 
+  scenario <- input_file_list[[scenario_name]]
+  
+  # initialize a model core for the current scenario
+  core <- newcore(scenario, name = scenario_name)
+  
+  # run the model looking across param_chunks 
+  result_list <- lapply(param_chunks, function(chunk) {
+    
+    iterate_model(core = core, 
+                  params = chunk,
+                  save_years = 1800:2100,
+                  save_vars = c("gmst",
+                                "CO2_concentration",
+                                "global_tas",
+                                "ocean_uptake"))
+  })
+  
+  # reset core for each iteration
+  reset(core)
+  
+  # Convert run_number to continuous among chunks 
+  for (i in 2:length(result_list)) {
+    
+    # calculate the max run_number of the previous element in result_list
+    max_run_number <- max(result_list[[i-1]]$run_number)
+    
+    # Add the max run_number of the previous element to the run_number of the current element
+    result_list[[i]]$run_number <- result_list[[i]]$run_number + max_run_number
+    
+  }
+  
+  bind_result <- do.call(rbind, result_list)
+  
+  return(bind_result)
+  
+})
+
+time_end = Sys.time() - time_start
+
+```
+
+Add names to the new list
+```{r}
+names(model_result) <- names(input_file_list)
+```
+
+
+Save the result:
+```{r}
+# save result as .RDS file
+saveRDS(model_result, "data/output/model_result.RDS")
+
+```
+
+### Score model runs
+
+```{r score model runs}
+
+model_scores <- lapply(model_result, function(df) {
+  
+  temp_wt <- score_runs(df, criterion_temp, score_bayesian, sigma = gmst_unc)
+  temp_wt <- na.omit(temp_wt)
+  
+  co2_wt <- score_runs(df, criterion_co2_obs(), score_bayesian, sigma = co2_unc)
+  co2_wt <- na.omit(co2_wt)
+  
+  ocean_uptake_wt <- score_runs(df, criterion_ocean_uptake, score_bayesian, sigma = ocean_uptake_unc)
+  ocean_uptake_wt <- na.omit(ocean_uptake_wt)
+  
+  score_list <- list(temp_wt, co2_wt, ocean_uptake_wt)
+  
+  mc_score <- multi_criteria_weighting(score_list, criterion_weights = c(0.6, 0.25, 0.15))
+  
+  return(mc_score)
+})
+
+```
+
+merge model weights with model results (for plotting later):
+```{r}
+weighted_ensemble <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number")
+  
+  return(merged)
+  
+}, model_result, model_scores)
+
+```
+
+### Get normalized temperature (global_tas values)
+
+Normalize temperature to pre-industrial reference period 1850-1900:
+
+```{r, get normalized temperature results}
+gsat_data <- lapply(weighted_ensemble, function(df) {
+  
+  global_tas_data = subset(df, variable == "global_tas"
+                           & year > 1849
+                           & year < 2101)
+  
+  normalized_values = normalize_dat(global_tas_data, 
+                                    ref_start = 1850, 
+                                    ref_end = 1900)
+  
+  global_tas_data$value <- normalized_values
+  
+  return(global_tas_data)
+  
+})
+```
+
+### Define metrics of interest
+
+```{r define metric for end kof century warming}
+warming_metric <- new_metric(var = "global_tas", years = 2090:2100, op = median)
+  
+```
+
+### Compute warming results 
+```{r compute warming metrics}
+warming_results <- lapply(gsat_data, function(df) {
+  
+  metric_result <- metric_calc(df, warming_metric)
+  
+  return(metric_result)
+})
+```
+
+Merge metric values with model scores:
+```{r build weighted metric dfs}
+weighted_gsat_data <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number")
+  
+  return(merged)
+  
+}, warming_results, model_scores)
+
+```
+
+save weighted metric data:
+```{r save weighterd metric data}
+saveRDS(weighted_gsat_data)
+
+```
+

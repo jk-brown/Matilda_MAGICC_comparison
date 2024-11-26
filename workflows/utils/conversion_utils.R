@@ -141,7 +141,7 @@ get_luc_emissions <- function(gcam_emissions_file) {
   
   # Expected years for the Hector luc_emissions will be from 2005:2100
   # wait...am I not using this anywhere?
-  expected_years <- 2005:2100
+  expected_years <- 1990:2100
   
   # create rows for years not in gcam data
   annual_luc <- global_luc %>% 

@@ -16,18 +16,18 @@ The goal of this step in the workflow is to load and pre-process emissions data 
 ## Source utils 
 
 ```{r, sourcing all utils, message=F, warning=FALSE}
-source("workflows/utils/source_all.R")
+source("utils/source_all.R")
 
 ```
 
 ## Load in NDC experiment data 
 
-```{r}
+```{r, load emissions data from NDC experiment}
 # GHG emissions
-ndc_ghg_emissions <- load_ghg_data("workflows/data/raw-data/global_emissions.csv")
+ndc_ghg_emissions <- load_ghg_data("data/raw-data/global_emissions.csv")
 
 # LUC emissions 
-ndc_luc_emissions <- load_luc_data("workflows/data/raw-data/global_LUC.csv")
+ndc_luc_emissions <- load_luc_data("data/raw-data/global_LUC.csv")
 
 ```
 
@@ -37,10 +37,10 @@ Split data by scenarios for the GHG and LUC emissions types and save data
 
 ```{r, save emissions for each scenario}
 # GHG emissions
-ndc_ghg_list <- scenario_split(ndc_ghg_emissions, "workflows/data/input/scenarios_ghg")
+ndc_ghg_list <- scenario_split(ndc_ghg_emissions, "data/input/scenarios_ghg")
 
 # LUC emissions
-ndc_luc_emissions <- scenario_split(ndc_luc_emissions, "workflows/data/input/scenarios_luc")
+ndc_luc_emissions <- scenario_split(ndc_luc_emissions, "data/input/scenarios_luc")
 
 ```
 
