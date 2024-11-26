@@ -25,89 +25,93 @@ repeat_add_columns <- function(x, y){
 
 # 2 converting GCAM emissions to Hector emissions -------------------------
 
-get_hector_emissions <- function(gcam_emissions_data){
+# Ensure necessary libraries are loaded
+library(data.table)
+library(dplyr)
 
-  # TODO: Add this with as an option -- only needs to be done if the GCAM data are 
-  # broken out by landleaf.
-  # 
-  # pull out the emissions data from the dat_file
-  # gcam_df <- gcam_data$GCAM$`all emissions by region`
-  # 
-  # # aggregate regional emissions to get global emissions totals
-  # global_emissions <- aggregate(value ~ year + ghg,
-  #                               data = gcam_df,
-  #                               FUN = sum)
+# Function to convert GCAM emissions data to Hector emissions format
+get_hector_emissions <- function(gcam_emissions_data) {
   
-  # Global data 
-  global_emissions <- gcam_emissions_data
+  # Step 1: Validate the input emissions data (make sure it's a data.table)
+  if (!is.data.table(gcam_emissions_data)) {
+    stop("The input GCAM emissions data must be a data.table.")
+  }
   
-  # get emissions mapping information
-  emissions_map <- read.csv("data/raw-data/GCAM_hector_emissions_map.csv") 
+  # Step 2: Read the emissions mapping information
+  emissions_map <- tryCatch({
+    read.csv("data/raw-data/GCAM_hector_emissions_map.csv")
+  }, error = function(e) {
+    stop("Error reading emissions map: ", e$message)
+  })
   
-  # merge emissions_map with global_emissions
-  gcam_emissions_map <- merge(global_emissions, emissions_map, 
-                              by = "ghg", 
-                              all.x = TRUE) # all.x = T ensures NAs are added where ghg in global_emissions is not in emissions_map
-  setDT(gcam_emissions_map)
+  # Ensure required columns exist in the emissions_map
+  required_columns_map <- c("ghg", "agg.gas", "unit.conv")
+  if (!all(required_columns_map %in% names(emissions_map))) {
+    stop("The emissions map CSV is missing required columns.")
+  }
   
-  # check that expected emissions are being passed to Hector.
-  # Expect NAs for:  H2, H2_AWB, PM10, PM2.5, and I think CO2_FUG
-  # TODO: what to do in CO2_FUG situation
-  missing_ghgs <- unique(gcam_emissions_map[is.na(gcam_emissions_map$agg.gas), ]$ghg)
+  # Step 3: Merge the global emissions data with the emissions map
+  gcam_emissions_map <- merge(gcam_emissions_data, emissions_map, by = "ghg", all.x = TRUE)
+  setDT(gcam_emissions_map)  # Ensure it's a data.table
+  
+  # Step 4: Check for missing GHGs (e.g., H2, H2_AWB)
+  missing_ghgs <- unique(gcam_emissions_map[is.na(agg.gas), ]$ghg)
   expected_missing_ghgs <- c("H2", "H2_AWB")
   
-  # check for the presence of expected_missing_ghgs in missing_ghgs.
-  # if any of the expected missing ghgs are not found in missing_ghgs, send an error. 
-  if(!all(expected_missing_ghgs %in% missing_ghgs)) {
-    stop ("Some emissions being passed to Hector are unexpected. These emissions may not be in Hector.")
+  # Stop if unexpected GHGs are found
+  if (!all(expected_missing_ghgs %in% missing_ghgs)) {
+    stop("Some emissions being passed to Hector are unexpected. These emissions may not be in Hector.")
   }
   
-  # convert gcam emissions to to hector emissions:
-  # 1 unit conversion
+  # Step 5: Perform unit conversion
   gcam_emissions_map$converted_value <- gcam_emissions_map$value * gcam_emissions_map$unit.conv
   
-  # 2 Halocarbon ghgs can be aggregated into a single halocarbon category
-  sum_halocarbon <- gcam_emissions_map[, list(value = sum(converted_value)), 
+  # Step 6: Aggregate Halocarbon GHGs into a single category
+  sum_halocarbon <- gcam_emissions_map[, .(value = sum(converted_value, na.rm = TRUE)),
                                        by = c("scenario", "agg.gas", "hector.name", "year", "hector.units")]
   
-  # omit NAs from the halocarbon aggregate
+  # Omit NAs from the halocarbon aggregate
   gcam_emissions_input <- na.omit(sum_halocarbon)
   
-  # Check for important columns
+  # Step 7: Validate required columns (year and value)
   required_columns <- c("year", "value")
-  if (!all(required_columns %in% names(gcam_emissions_input))){
-    stop("hmmm, there is an important column missing is there a year and value column present?")
+  if (!all(required_columns %in% names(gcam_emissions_input))) {
+    stop("Required columns 'year' and 'value' are missing.")
   }
   
-  # establish data years; 2005:2100. Before 2005 Hector uses GCAM inputs
+  # Step 8: Define the target year range (1990-2100) for Hector
   data_years <- data.table(year = 1990:2100)
   
-  # TODO: Is there a better way to do the following lines?
-  # Construct data frame of all the variables for the 2005:2100 year range.
-  # This code creates a data frame with NAs when no GCAM emissions are available.
-  # The NAs will be subsequently infilled.
-  columns_to_save <- names(gcam_emissions_input)[!names(gcam_emissions_input) %in% required_columns]
+  # Step 9: Replicate data for target years (2005-2100)
+  columns_to_save <- setdiff(names(gcam_emissions_input), required_columns)
   data_to_replicate <- distinct(gcam_emissions_input[, ..columns_to_save])
-  data_with_target_years <- repeat_add_columns(x = data_to_replicate, y = data_years)
-  NA_emissions <- gcam_emissions_input[data_with_target_years, on = names(data_with_target_years), nomatch = NA]
+  data_with_target_years <- merge(data_to_replicate, data_years, by = NULL, allow.cartesian = TRUE)
   
-  # Replace emission NAs with approximated values 
-  approximated_emissions <- NA_emissions %>% 
-    group_by(hector.name, hector.units) %>% 
-    mutate(value = ifelse(is.na(value), 
-                          approx(year, value, xout = year, rule = 2)$y, 
-                          value)) %>% 
-    ungroup() %>% 
+  # Merge the target years with the emissions data and add NAs where no data is available
+  NA_emissions <- merge(data_with_target_years, gcam_emissions_input, by = names(data_with_target_years), all.x = TRUE)
+  
+  # Step 10: Replace NAs with approximated values
+  approximated_emissions <- NA_emissions %>%
+    group_by(hector.name, hector.units) %>%
+    mutate(value = ifelse(
+      all(is.na(value)), 
+      NA, # Skip groups with all NAs
+      approx(year, value, xout = year, rule = 2)$y
+    )) %>%
+    ungroup() %>%
     setDT()
   
-  # construct final output
+  # Step 11: Construct the final Hector emissions data
   hector_emissions <- approximated_emissions[, .(scenario = scenario,
                                                  variable = hector.name,
                                                  year = year,
                                                  value = value,
                                                  units = hector.units)]
+  
+  # Return the final emissions data
   return(hector_emissions)
 }
+
 
 
 # 3 converting GCAM LUC emissions to Hector  ------------------------------

@@ -1,4 +1,4 @@
-## Criterion mapping -- code to acheive updated scoring criterion
+## Criterion mapping -- code to achieve updated scoring criterion
 
 ### Building new criterion
 
