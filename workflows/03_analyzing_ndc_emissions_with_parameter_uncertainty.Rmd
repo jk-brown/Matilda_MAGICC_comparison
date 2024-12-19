@@ -1,5 +1,5 @@
 ---
-title: "03-Running Hector with NDC emissions input"
+title: "03-Running Hector parameter uncertainty with NDC emissions input"
 author: "Joe Brown"
 date: "2024-11-12"
 output: html_document
@@ -43,7 +43,7 @@ Use the NDC ini list to run Hector with the Matilda workflow.
 set.seed(123)
 
 # set sample size for param generation
-n = 1000
+n = 3000
 
 # initiate a core that can be used to generate parameters -- here we will use SSP2-4.5
 param_core <- newcore(system.file("input/hector_ssp245.ini", package = "hector"))
@@ -58,7 +58,7 @@ params <- generate_params(core = param_core,
 
 ```{r, split params into chunks and prepare cluster}
 # splitting params df into chunks
-param_chunks <- split(params, 1:10)
+param_chunks <- split(params, 1:1000)
 
 # prep cluster
 # initiate a cluster
@@ -128,7 +128,6 @@ Add names to the new list
 names(model_result) <- names(input_file_list)
 ```
 
-
 Save the result:
 ```{r}
 # save result as .RDS file
@@ -136,96 +135,118 @@ saveRDS(model_result, "data/output/model_result.RDS")
 
 ```
 
-### Score model runs
-
-```{r score model runs}
-
-model_scores <- lapply(model_result, function(df) {
-  
-  temp_wt <- score_runs(df, criterion_temp, score_bayesian, sigma = gmst_unc)
-  temp_wt <- na.omit(temp_wt)
-  
-  co2_wt <- score_runs(df, criterion_co2_obs(), score_bayesian, sigma = co2_unc)
-  co2_wt <- na.omit(co2_wt)
-  
-  ocean_uptake_wt <- score_runs(df, criterion_ocean_uptake, score_bayesian, sigma = ocean_uptake_unc)
-  ocean_uptake_wt <- na.omit(ocean_uptake_wt)
-  
-  score_list <- list(temp_wt, co2_wt, ocean_uptake_wt)
-  
-  mc_score <- multi_criteria_weighting(score_list, criterion_weights = c(0.6, 0.25, 0.15))
-  
-  return(mc_score)
-})
-
-```
-
-merge model weights with model results (for plotting later):
-```{r}
-weighted_ensemble <- Map(function(a, b) {
-  
-  merged <- merge(a, b, by = "run_number")
-  
-  return(merged)
-  
-}, model_result, model_scores)
-
-```
-
 ### Get normalized temperature (global_tas values)
 
-Normalize temperature to pre-industrial reference period 1850-1900:
+Normalize temperature to pre-industrial reference period 1850-1900.
 
-```{r, get normalized temperature results}
-gsat_data <- lapply(weighted_ensemble, function(df) {
+### Compute summary statistics
+
+```{r}
+## normalize the result 
+model_result_normalized <- lapply(model_result, function(df) {
   
-  global_tas_data = subset(df, variable == "global_tas"
-                           & year > 1849
-                           & year < 2101)
+  norm_dat = normalize_to_reference(df, reference_start = 1850, reference_end = 1900)
   
-  normalized_values = normalize_dat(global_tas_data, 
-                                    ref_start = 1850, 
-                                    ref_end = 1900)
+  return(norm_dat)
   
-  global_tas_data$value <- normalized_values
+  })
+
+# get names 
+names(model_result_normalized) <- names(model_result)
+
+## subset to only include the variable of interest
+gsat_data <- lapply(model_result_normalized, function(df) {
   
-  return(global_tas_data)
+  subset_data = subset(df, variable == "global_tas")
+  
+  return(subset_data)
+})
+
+## compute summary statistics
+summary_no_weighting <- lapply(names(gsat_data), function(scenario_names) {
+  
+  df = gsat_data[[scenario_names]]
+  
+  summary_no_wts <- df %>% 
+  group_by(year) %>% 
+  summarise(
+    median = quantile(normalized_value, probs = 0.50), 
+    ci_05 = quantile(normalized_value, probs = 0.05),
+    ci_10 = quantile(normalized_value, probs = 0.10),
+    ci_33 = quantile(normalized_value, probs = 0.33),
+    ci_67 = quantile(normalized_value, probs = 0.67), 
+    ci_90 = quantile(normalized_value, probs = 0.90), 
+    ci_95 = quantile(normalized_value, probs = 0.95), 
+    .groups = "drop"
+  )
+  
+  summary_no_wts$scenario = scenario_names
+  
+  return(summary_no_wts)
   
 })
-```
 
-### Define metrics of interest
-
-```{r define metric for end kof century warming}
-warming_metric <- new_metric(var = "global_tas", years = 2090:2100, op = median)
-  
-```
-
-### Compute warming results 
-```{r compute warming metrics}
-warming_results <- lapply(gsat_data, function(df) {
-  
-  metric_result <- metric_calc(df, warming_metric)
-  
-  return(metric_result)
-})
-```
-
-Merge metric values with model scores:
-```{r build weighted metric dfs}
-weighted_gsat_data <- Map(function(a, b) {
-  
-  merged <- merge(a, b, by = "run_number")
-  
-  return(merged)
-  
-}, warming_results, model_scores)
 
 ```
 
-save weighted metric data:
-```{r save weighterd metric data}
-saveRDS(weighted_gsat_data)
+### Plotting the results for Hector parameter uncertainty
 
+```{r}
+# bind data frames together 
+no_weighting_plot_df <- do.call(rbind, summary_no_weighting)
+no_weighting_plot_df <- subset(no_weighting_plot_df, year > 1994)
+
+parametric_uncertainty_plot <- ggplot() +
+  geom_ribbon(data = no_weighting_plot_df, 
+              aes(x = year, 
+                  ymin = ci_10, 
+                  ymax = ci_90), 
+              fill = "grey", alpha = 0.5) +
+  geom_ribbon(data = no_weighting_plot_df, 
+              aes(x = year, 
+                  ymin = ci_33, 
+                  ymax = ci_67), 
+              fill = 'orange', alpha = 0.5) +
+    geom_line(data = no_weighting_plot_df, 
+            aes(x = year, y = median), 
+            color = "black") +
+  facet_wrap(~scenario)
+parametric_uncertainty_plot
+
+ggsave("no_weighting_exp_param_uncertainty.png",
+       parametric_uncertainty_plot,
+       device = "png", 
+       dpi = 300)
+```
+
+```{r}
+no_weighting_plot_bau <- subset(no_weighting_plot_df, 
+                               year > 1994 &
+                                 scenario == "T_01_BAU")
+magicc_bau <- read.csv("data/raw-data/T_01_BAU_magicc.csv")
+
+parametric_uncertainty_bau <- ggplot() +
+  geom_ribbon(data = no_weighting_plot_bau, 
+              aes(x = year, 
+                  ymin = ci_10, 
+                  ymax = ci_90), 
+              fill = "grey", alpha = 0.5) +
+  geom_ribbon(data = no_weighting_plot_bau, 
+              aes(x = year, 
+                  ymin = ci_33, 
+                  ymax = ci_67), 
+              fill = 'orange', alpha = 0.5) +
+  geom_line(data = no_weighting_plot_bau, 
+            aes(x = year, y = median), 
+            color = "black") +
+  geom_line(data = magicc_bau, 
+            aes(x = year, 
+                y = value), 
+            color = "red")
+parametric_uncertainty_bau
+
+ggsave("no_weighting_exp_param_uncertainty_BAU.png", 
+       device = "png", 
+       dpi = 300)
 ```
 

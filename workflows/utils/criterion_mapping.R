@@ -8,7 +8,8 @@
 
 ## Temperature criterion
 temp_data <- read.csv("data/raw-data/criterion_data/gmst_anomaly_hadcrut5.csv")
-criterion_temp <- new_criterion("gmst", years = temp_data$year, obs_values = temp_data$value)
+temp_data <- normalize_single_series(temp_data, reference_start = 1850, reference_end = 1900)
+criterion_temp <- new_criterion("gmst", years = temp_data$year, obs_values = temp_data$normalized_value)
 
 ## Ocean carbon uptake criterion
 ocean_uptake_data <- read.csv("data/raw-data/criterion_data/annual_ocean_c_uptake.csv")
@@ -26,9 +27,10 @@ rm(ocean_uptake_data)
 ## Global Mean Surface Temperature
 # Load GMST uncertainty data
 gmst_unc <- read.csv("data/raw-data/criterion_data/annual_gmst_SD_quant.csv")
+gmst_unc <- normalize_single_series(gmst_unc, reference_start = 1850, reference_end = 1900)
 
 # vector of uncertainty values
-gmst_unc <- gmst_unc$value
+gmst_unc <- gmst_unc$normalized_value
 
 ## Atmospheric CO2 Concentration
 # CO2 conc uncertainty

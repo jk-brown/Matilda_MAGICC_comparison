@@ -1,0 +1,72 @@
+---
+title: "06_Hector_MAGICC_deterministic"
+author: "Joe Brown"
+date: "2024-12-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, list files in ini directory}
+input_file_directory <- "data/input/ini/"
+
+input_files <- list.files(input_file_directory)
+
+input_file_list <- list(T_01_BAU = paste0(input_file_directory, input_files[1]),
+                    T_02_CAT_crnt = paste0(input_file_directory, input_files[2]), 
+                    T_03_CAT_crnt = paste0(input_file_directory, input_files[3]),
+                    T_04_NDC_cont = paste0(input_file_directory, input_files[4]), 
+                    T_05_NDC_inc_LTS = paste0(input_file_directory, input_files[5]), 
+                    T_06_NDC_cont = paste0(input_file_directory, input_files[6]),
+                    T_07_NDC_inc_LTS = paste0(input_file_directory, input_files[7]))
+
+BAU_ini <- input_file_list[1]
+
+core_BAU <- newcore(BAU_ini$T_01_BAU, name = "BAU")
+
+```
+
+```{r}
+# Run model
+run(core_BAU, runtodate = 2100)
+
+# fetch vars of interest 
+hector_determ <- fetchvars(core_BAU, 1800:2100, vars = GLOBAL_TAS())
+```
+
+# Normalize
+
+```{r}
+hector_determ_norm <- normalize_single_series(hector_determ, reference_start = 1850, reference_end = 1900)
+
+## filter to comparable year 
+hector_determ_norm <- hector_determ_norm %>% 
+  filter(year > 1994)
+```
+
+# plotting
+Plotting Hector deterministic
+```{r}
+hector_determ_plot <- ggplot() +
+  geom_line(data = hector_determ_norm,
+    aes( x = year, y = value), 
+    color = "dodgerblue", 
+    linewidth = 0.7) +
+  geom_line( data = magicc_bau, 
+             aes(x = year, 
+                 y = value), 
+             color = "red", 
+             linewidth = 0.7) +
+  theme_light()+
+  labs(title = "Hector v. Magicc single run", y = "GSAT anomaly")
+hector_determ_plot
+
+ggsave("single_run_comparison.png", 
+       hector_determ_plot,
+       device = "png", 
+       dpi = 300)
+```
+

@@ -1,0 +1,101 @@
+---
+title: "05_analyzing_full_ensemble"
+author: "Joe Brown"
+date: "2024-12-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+merge model weights with model results (for plotting later):
+```{r}
+unconstrained_ensemble <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number")
+  
+  return(merged)
+  
+}, model_result, model_scores)
+
+```
+
+### Computing summary stats
+```{r}
+## subset to only include the variable of interest
+gsat_ensemble <- lapply(unconstrained_ensemble, function(df) {
+  
+  subset_data = subset(df, variable == "global_tas")
+  
+  return(subset_data)
+})
+
+# ## normalize gsat data 
+# gsat_ensemble_normalized <- lapply(gsat_ensemble, function(df) {
+#   
+#   normalize_to_reference(df, reference_start = 1850, reference_end = 1900)
+#   
+# }) 
+
+## compute summary statistics
+summary_ensemble <- lapply(names(gsat_ensemble), function(scenario_name) {
+  
+  df <- gsat_ensemble[[scenario_name]]
+  
+  summary_wts <- df %>% 
+  group_by(year) %>% 
+  summarise(
+    median = weighted.quantile(value, w = mc_weight, probs = 0.50),
+    ci_05 = weighted.quantile(value, w = mc_weight, probs = 0.05),
+    ci_10 = weighted.quantile(value, w = mc_weight, probs = 0.10),
+    ci_33 = weighted.quantile(value, w = mc_weight, probs = 0.33),
+    ci_67 = weighted.quantile(value, w = mc_weight, probs = 0.67), 
+    ci_90 = weighted.quantile(value, w = mc_weight, probs = 0.90), 
+    ci_95 = weighted.quantile(value, w = mc_weight, probs = 0.95), 
+    .groups = "drop"
+  )
+  
+  summary_wts$scenario <- scenario_name
+  
+  return(summary_wts)
+  
+})
+
+```
+
+## plotting the weighted results 
+```{r}
+# bind data frames together 
+ensemble_plot_df <- do.call(rbind, summary_ensemble)
+ensemble_plot_df <- subset(ensemble_plot_df, year > 1994)
+
+ensemble_plot_df <- ensemble_plot_df %>% 
+  filter(!scenario %in% c("T_06_NDC_cont", "T_07_NDC_inc_LTS"))
+
+full_ensemble_plot <- ggplot() +
+  geom_ribbon(data = ensemble_plot_df, 
+              aes(x = year, 
+                  ymin = ci_10, 
+                  ymax = ci_90), 
+              fill = "grey", alpha = 0.5) +
+  geom_ribbon(data = ensemble_plot_df, 
+              aes(x = year, 
+                  ymin = ci_33, 
+                  ymax = ci_67), 
+              fill = 'orange', alpha = 0.5) +
+    geom_line(data = ensemble_plot_df, 
+            aes(x = year, y = median), 
+            color = "black") +
+  facet_wrap(~scenario) +
+  theme_light() 
+full_ensemble_plot
+
+ensemble_plot_bau_df <- subset(ensemble_plot_df, 
+                               year > 1994 &
+                                 scenario == "T_01_BAU")
+
+
+
+```
+
