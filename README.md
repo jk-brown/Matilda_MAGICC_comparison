@@ -44,3 +44,23 @@ These results show that Hector/Matilda significantly reduces the tail risk (at h
  2. Is it possible to run Hector in "MAGICC mode" and MAGICC in "Hector mode"? I think this means -- is it possible to run Hector to free run after a certain point, in the way that MAGICC does, and is it then possible to run MAGICC in a free run set-up from the initial year, in the way that Hector does.
 
     Running MAGICC in a "Hector mode" I think would 100% require collaboration? Maybe not but it would be harder with out the collab.
+
+# Meeting 12/20/2024
+## Notes
+Although there are similarities and some differences between MAGICC and Hector + Matilda we need to be very intentional about statements we make in support of one over the other and we need to have a realy good defenisble reason for using one over the other. There are important policy implications in the tails of distributions that we want to make sure we are appropriately informing. And so we need to be confident and knowledgable to the extent that we can about our ability to characterize the uncertainty in the tails of the distributions. 
+
+It is our burden in any paper that we may end uo writing up for this to explain the differences that we see or will be showing in the paper -- My burden, I need to make sure that I am able to explain the reasoning behind it. This is not only important for me to provie that I can do this shit but also it is important for JGCRI beyond my expiration date. If it can be used and explained clearly the use of the tool will grow. So, with any publication that will come out of this (as should be our goal), a MAGICC v. Hector + Matilda comparison must have some context. We can't just say "the models are different and we don't know why." We need to explain clearly why they are different.
+
+## Experiments 
+1. We want to have an experiment where we use Hector + Matilda to emulate MAGICC results -- this can be done fairly simply in Matilda using MAGICC results to constrain (and weight) Hector model outputs. I think I would do this by creating a MAGICC scoring criterion?  There are other ways for this to be done -- RMSE calculation and pick those that have lowest RMSE -- this is goign to be the same thing as finding the highest likelihood. This will be done using the future projections of MAGICC.
+2. How do the parameters of this Hector in MAGICC emulation mode results compare to what the Hector MAtilda run normally using historical data as a "constraint".
+
+
+
+
+
+
+
+
+
+
