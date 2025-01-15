@@ -1,0 +1,390 @@
+---
+title: "using_weighted_params"
+author: "Joe Brown"
+date: "2024-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goal
+
+The goal of this document is to run Hector with Matilda using NDC emissions scenarios to compare with results from MAGICC7 used in Ou and Iyer 2021.
+
+## Weight model results
+
+Weight the normalized ensemble.  Will need to load the data if not already in global env.
+
+### Score model runs
+
+```{r score model runs}
+
+model_scores <- lapply(model_result, function(df) {
+  
+  temp_wt <- score_runs(df, criterion_temp, score_bayesian)
+  temp_wt <- na.omit(temp_wt)
+  
+  co2_wt <- score_runs(df, criterion_co2_obs(), score_bayesian)
+  co2_wt <- na.omit(co2_wt)
+  
+  ocean_uptake_wt <- score_runs(df, criterion_ocean_uptake, score_bayesian)
+  ocean_uptake_wt <- na.omit(ocean_uptake_wt)
+  
+  score_list <- list(temp_wt, co2_wt, ocean_uptake_wt)
+  
+  mc_score <- multi_criteria_weighting(score_list, criterion_weights = c(.9, 0.05, 0.05))
+  
+  return(mc_score)
+})
+
+```
+
+Filter the top 200 weights:
+```{r}
+top_200_scores <- lapply(model_scores, function(df){
+  
+  df[order(df$mc_weight, decreasing = TRUE), ][1:600, ]
+
+})
+
+```
+
+merge model weights with model results (for plotting later):
+```{r}
+weighted_ensemble <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number")
+  
+  return(merged)
+  
+}, model_result, top_200_scores)
+
+```
+
+### Computing summary stats
+```{r}
+## subset to only include the variable of interest
+gsat_data_weighted <- lapply(weighted_ensemble, function(df) {
+  
+  subset_data = subset(df, variable == "global_tas")
+  
+  return(subset_data)
+})
+
+## normalize gsat data 
+gsat_data_normalized <- lapply(gsat_data_weighted, function(df) {
+  
+  normalize_to_reference(df, reference_start = 1850, reference_end = 1900)
+  
+}) 
+
+## compute summary statistics
+summary_weighting <- lapply(names(gsat_data_normalized), function(scenario_name) {
+  
+  df <- gsat_data_normalized[[scenario_name]]
+  
+  summary_wts <- df %>% 
+  group_by(year) %>% 
+  summarise(
+    median = weighted.quantile(normalized_value, w = mc_weight, probs = 0.50),
+    ci_05 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.05),
+    ci_10 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.10),
+    ci_33 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.33),
+    ci_67 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.67), 
+    ci_90 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.90), 
+    ci_95 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.95), 
+    .groups = "drop"
+  )
+  
+  summary_wts$scenario <- scenario_name
+  
+  return(summary_wts)
+  
+})
+
+```
+
+## plotting the weighted results 
+```{r}
+# bind data frames together 
+weighting_plot_df <- do.call(rbind, summary_weighting)
+weighting_plot_df <- subset(weighting_plot_df, year > 1994)
+
+weighting_plot_df <- weighting_plot_df %>% 
+  filter(!scenario %in% c("T_06_NDC_cont", "T_07_NDC_inc_LTS"))
+
+# load ou and Iyer data
+ou_data <- read.csv("data/raw-data/ou_Iyer_global_mean_temperature.csv")
+
+parametric_uncertainty_plot_weighted <- ggplot() +
+  # Ribbon for 10th-90th percentile
+  geom_ribbon(data = weighting_plot_df, 
+              aes(x = year, 
+                  ymin = ci_10, 
+                  ymax = ci_90), 
+              fill = "grey", alpha = 0.5) +
+  
+  # Ribbon for 33rd-67th percentile
+  geom_ribbon(data = weighting_plot_df, 
+              aes(x = year, 
+                  ymin = ci_33, 
+                  ymax = ci_67), 
+              fill = 'orange', alpha = 0.5) +
+  
+  # Median line
+  geom_line(data = weighting_plot_df, 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # Ou and Iyer et al. 2021 line
+  geom_line(data = ou_data, 
+            aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
+            linewidth = 0.7) +
+  
+  # Facet by scenario
+  facet_wrap(~scenario) +
+  
+  # Add labels and theme
+  labs(
+    title = "Constrained/Weighted Projections",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Median" = "black",
+      "Ou and Iyer et al. 2021" = "red"
+    )
+  ) +
+  
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12), # Facet label size
+    legend.position = c(0.82, 0.2), # Manually position the legend
+    legend.justification = "center"
+  )
+
+parametric_uncertainty_plot_weighted
+
+
+ggsave("emissions_projections_weighted.png", 
+       device = "png",
+       height = 7, 
+       width = 10, 
+       units = "in",
+       dpi = 300)
+```
+
+```{r}
+bau_ou <- ou_data %>% 
+  filter(scenario == "T_01_BAU")
+
+ggplot() +
+  geom_line(data = bau_ou, 
+            aes(x = year, y = value)) +
+  geom_line(data = magicc_bau, 
+            aes(x = year, y = value))
+```
+
+Plotting BAU scenario against MAGICC:
+```{r}
+weighting_plot_bau <- subset(weighting_plot_df, 
+                               year > 1994 &
+                                 scenario == "T_01_BAU")
+magicc_bau <- read.csv("data/raw-data/T_01_BAU_magicc.csv")
+magicc_unc <- read.csv("data/raw-data/cmip6_unc.csv")
+
+parametric_uncertainty_weighted_bau <- ggplot() +
+  # CMIP6 ESM lines
+  geom_line(data = cmip6_tas, 
+            aes(year, value, group = interaction(model), color = "CMIP6 ESM"), 
+            alpha = 0.2) +
+  
+  # Weighted uncertainty ribbons and median
+  geom_ribbon(data = weighting_plot_bau, 
+              aes(x = year, ymin = ci_10, ymax = ci_90), 
+              fill = "#3B9AB2", alpha = 0.1, color = "#3B9AB2", linetype = "dashed", linewidth = 0.5, show.legend = FALSE) +
+  geom_line(data = weighting_plot_bau, 
+            aes(x = year, y = median, color = "Weighted Median (Hector + Matilda)"), 
+            linewidth = 0.7) +
+  
+  # MAGICC uncertainty ribbons and median
+  geom_line(data = magicc_bau, 
+            aes(x = year, y = value, color = "MAGICC Median"), 
+            linewidth = 0.7) +
+  geom_ribbon(data = magicc_unc, 
+              aes(x = year, ymin = lower, ymax = upper), 
+              color = "#F21A00", fill = NA, linetype = "dashed", show.legend = FALSE) +
+  
+  # No weighting ribbons and median
+  geom_ribbon(data = no_weighting_plot_bau, 
+              aes(x = year, ymin = ci_10, ymax = ci_90), 
+              fill = "#EBCC2A", alpha = 0.1, color = "#EBCC2A", linetype = "dashed", show.legend = FALSE) +
+  geom_line(data = no_weighting_plot_bau, 
+            aes(x = year, y = median, color = "Unweighted Median (Hector + Matilda)"), 
+            linewidth = 0.7) +
+  
+  # Titles, labels, and theme
+  labs(
+    title = "Constrained/Weighted vs. Unconstrained/Unweighted BAU Scenario",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  # Custom legend colors
+  scale_color_manual(
+    values = c(
+      "CMIP6 ESM" = "darkgrey",
+      "MAGICC Median" = "#F21A00",
+      "Weighted Median (Hector + Matilda)" = "#3B9AB2",
+      "Unweighted Median (Hector + Matilda)" = "#EBCC2A"
+    )
+  ) +
+  
+  theme_light() +
+   theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = c(0.01, 0.99),  # Use this to place the legend inside the panel
+    legend.justification = c(0, 1), # Align legend's top-left corner
+    legend.background = element_rect(fill = "white", color = "black")
+  )
+
+
+parametric_uncertainty_weighted_bau
+
+ggsave("weighted_unweighted_comparison.png", 
+       device = "png", 
+       height = 7, 
+       width = 10, 
+       units = "in",
+       dpi = 300)
+
+```
+
+
+### Define metrics of interest
+
+```{r define metric for end of century warming}
+warming_metric <- new_metric(var = "global_tas", years = 2100, op = median)
+  
+```
+
+### Compute warming results 
+
+```{r compute warming metrics}
+warming_results <- lapply(gsat_data_normalized, function(df) {
+  
+  metric_result <- metric_calc(df, warming_metric)
+  
+  return(metric_result)
+})
+```
+
+Merge metric values with model scores:
+```{r build weighted metric dfs}
+weighted_gsat_data <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number")
+  
+  return(merged)
+  
+}, warming_results, top_200_scores)
+
+```
+
+save weighted metric data:
+```{r save weighterd metric data}
+# saveRDS(weighted_gmst_data)
+
+```
+
+### Computing probabilities 
+
+```{r computing probabilities}
+# define temperature ranges of interest -- align with ou and Iyer 
+temp_ranges <- c(1, 1.5, 2, 3, 4, Inf)
+
+temp_probability <- lapply(names(weighted_gsat_data), function(scenario) {
+  
+  df <- weighted_gsat_data[[scenario]]
+  
+  # run prob_calc
+  prob_results <- prob_calc(df$metric_result, 
+                            bins = temp_ranges, 
+                            scores = df$mc_weight)
+  
+  prob_results$scenario <- scenario
+  
+  return(prob_results)
+})
+
+```
+
+Bind probability list:
+```{r}
+prob_bind <- do.call(rbind, temp_probability)
+
+prob_bind <- prob_bind %>% 
+  filter(!scenario %in% c("T_06_NDC_cont", "T_07_NDC_inc_LTS"))
+```
+
+
+```{r}
+temp_cols <- c("darkgrey","lightgrey","salmon", "#B2182B","#67001F")
+
+# order levels
+scen_order <- c("T_05_NDC_inc_LTS", "T_04_NDC_cont","T_03_CAT_crnt", "T_02_CAT_crnt", "T_01_BAU")
+prob_bind$scenario <- factor(prob_bind$scenario, levels = scen_order)
+
+probability_plot <- 
+  ggplot(data = prob_bind, # identify the data location
+         aes(
+           fill = bins, # how fill should be applied
+           x = scenario, # what data goes on the x-axis
+           y = probability)) + # what data goes on the y-axis
+  # below we will be flipping the coord of the figure so right now the axes seem 
+  # backwards from what we want.
+  geom_bar(position = position_fill(reverse = T), # what type of plot we want and reverse the 
+                                                  # stack order so cooler temps are on left
+           stat = "identity", # we want the width of the bar pieces to be constrained by a value in the data
+           width = 0.6) + # how wide do you want the bar - personal preference
+  scale_y_continuous(breaks = seq(0.0, 1.0, 0.1)) + # set the number and interval of probability breaks
+  scale_fill_manual(
+    values = temp_cols, # indicate the color palette to use
+    labels = c(         # edit labels for the legend
+      expression(paste("1.0 to 1.5", ~degree, "C")),
+      expression(paste("1.5 to 2.0", ~degree, "C")),
+      expression(paste("2.0 to 3.0", ~degree, "C")),
+      expression(paste("3.0 to 4.0", ~degree, "C")),
+      expression(paste(" > 4.0", ~degree, "C"))),
+    name = "Warming") + # name of the legend
+  labs(y = "Probability",
+       x = "Scenario", 
+       title = "Probability of Warming") +
+  coord_flip() + # flip the coordinates of the figure to make horizontal representation
+  theme_light() + # set theme - personal preference 
+  theme(legend.position = "bottom") # change legend position - personal preference
+
+probability_plot
+
+ggsave("constrained_probability_plot.png", 
+       device = "png",
+       dpi = 300, 
+       height = 4)
+```
+

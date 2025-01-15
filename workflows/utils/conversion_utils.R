@@ -26,7 +26,7 @@ repeat_add_columns <- function(x, y){
 # 2 converting GCAM emissions to Hector emissions -------------------------
 
 get_hector_emissions <- function(gcam_emissions_data){
-
+  
   # TODO: Add this with as an option -- only needs to be done if the GCAM data are 
   # broken out by landleaf.
   # 
@@ -80,7 +80,7 @@ get_hector_emissions <- function(gcam_emissions_data){
   }
   
   # establish data years; 2005:2100. Before 2005 Hector uses GCAM inputs
-  data_years <- data.table(year = 1990:2100)
+  data_years <- data.table(year = 2005:2100)
   
   # TODO: Is there a better way to do the following lines?
   # Construct data frame of all the variables for the 2005:2100 year range.
@@ -109,7 +109,6 @@ get_hector_emissions <- function(gcam_emissions_data){
   return(hector_emissions)
 }
 
-
 # 3 converting GCAM LUC emissions to Hector  ------------------------------
 
 get_luc_emissions <- function(gcam_emissions_file) {
@@ -132,29 +131,28 @@ get_luc_emissions <- function(gcam_emissions_file) {
   luc_df$units <- "Pg C/yr"
   conv.factor <- 0.001 # From MT C/yr to Pg C/yr
   luc_df$converted_value <- luc_df$value * conv.factor
+  luc_df$value <- luc_df$converted_value
   
-  # Aggregate regions to global luc_emissions for Hector
-  global_luc <- luc_df %>%
-    group_by(scenario, variable, year, units) %>%
-    summarize(value = sum(converted_value)) %>%
-    ungroup()
-  
-  # Expected years for the Hector luc_emissions will be from 2005:2100
-  # wait...am I not using this anywhere?
-  expected_years <- 1990:2100
-  
+  # # Aggregate regions to global luc_emissions for Hector
+  # global_luc <- luc_df %>%
+  #   group_by(scenario, variable, year, units) %>%
+  #   summarize(value = sum(converted_value), .groups = "drop")
+
+  # # Expected years for the Hector luc_emissions will be from 2005:2100
+  # # wait...am I not using this anywhere?
+  # expected_years <- 1990:2100
+  # 
   # create rows for years not in gcam data
-  annual_luc <- global_luc %>% 
-    complete(year = 1975:2100, # use complete() to get complete years in the df and fill with NAs
+  annual_luc <- luc_df %>% 
+    complete(year = 2005:2100, # use complete() to get complete years in the df and fill with NAs
              nesting(scenario, variable, units), 
              fill = list(value = NA)) %>% 
-    filter(year > 1989) %>% 
+    filter(year > 2005) %>% 
     # only interested in 2005 -- before 2005 Hector uses gcam emissions?
     # TODO: get confirmation about filtering in line 152
     mutate(value = ifelse(is.na(value), 
                           approx(year, value, xout = year, rule = 2)$y,
-                          value)) %>% 
-    ungroup() %>% 
+                          value)) %>%
     select(scenario, variable, year, value, units)
   
   return(annual_luc)
