@@ -1,0 +1,148 @@
+---
+title: "Emulating MAGICC"
+author: "Joe Brown"
+date: "2025-01-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("utils/source_all.R")
+```
+
+# Goal
+
+Use MAGICC data to run an analysis where Hector + Matilda "emulates" MAGICC. 
+
+To do this:
+
+1. Create a "MAGICC" criterion using the MAGICC warming data from Ou and Iyer. 
+
+2. Use the criterion to weight the Hector ensemble from Matilda.
+
+3. Plot full weighted ensemble -- median and uncertainty range. 
+
+4. Plot constrained ensemble -- selecting the top X number of Hector runs based on weight.
+
+5. Compare parameters of Hector vs. MAGICC emulated Hector.
+
+To start, load `model_result.RDS` from the `data/output` directory.
+
+# New Scoring Criterion using MAGICC
+
+Create new MAGICC criterion:
+```{r}
+# load magicc data
+magicc_data <- read.csv("data/raw-data/ou_Iyer_global_mean_temperature.csv")
+magicc_data_bau <- magicc_data %>%
+  subset(scenario == "T_01_BAU") %>% 
+  select(-scenario)
+  
+# create new criterion
+criterion_magicc <- new_criterion("global_tas", years = magicc_data_bau$year, obs_values = magicc_data_bau$value)
+```
+
+Score model results using magicc data:
+```{r}
+bau_data <- model_result$T_01_BAU
+
+model_scores_magicc <- score_runs(bau_data, criterion = criterion_magicc, score_function = score_bayesian)
+
+```
+
+Filter the top 600 weights:
+```{r}
+top_600_scores_magicc <- model_scores_magicc[order(model_scores_magicc$weights, decreasing = TRUE), ][1:600, ]
+
+```
+
+merge model weights with model results (for plotting later):
+```{r}
+
+weighted_ensemble_magicc <- merge(bau_data, top_600_scores_magicc, by = "run_number")
+
+```
+
+### Computing summary stats
+```{r}
+## subset to only include the variable of interest
+gsat_data_weighted_magicc <- subset(weighted_ensemble_magicc, variable == "global_tas")
+
+## normalize gsat data 
+gsat_data_normalized_magicc <- normalize_to_reference(gsat_data_weighted_magicc, reference_start = 1850, reference_end = 1900)
+
+## compute summary statistics
+summary_weighting_magicc <-  gsat_data_normalized_magicc %>%
+  group_by(year) %>%
+  summarise(
+    median = weighted.quantile(normalized_value, w = weights, probs = 0.50),
+    ci_05 = weighted.quantile(normalized_value, w = weights, probs = 0.05),
+    ci_10 = weighted.quantile(normalized_value, w = weights, probs = 0.10),
+    ci_33 = weighted.quantile(normalized_value, w = weights, probs = 0.33),
+    ci_67 = weighted.quantile(normalized_value, w = weights, probs = 0.67),
+    ci_90 = weighted.quantile(normalized_value, w = weights, probs = 0.90),
+    ci_95 = weighted.quantile(normalized_value, w = weights, probs = 0.95),
+    .groups = "drop"
+  )
+
+```
+
+## plotting the weighted results 
+```{r}
+magicc_emulated_plot_weighted <- ggplot() +
+  # Ribbon for 10th-90th percentile
+  geom_ribbon(data = summary_weighting_magicc, 
+              aes(x = year, 
+                  ymin = ci_10, 
+                  ymax = ci_90), 
+              fill = "grey", alpha = 0.5) +
+  
+  # Ribbon for 33rd-67th percentile
+  geom_ribbon(data = summary_weighting_magicc, 
+              aes(x = year, 
+                  ymin = ci_33, 
+                  ymax = ci_67), 
+              fill = 'orange', alpha = 0.5) +
+  
+  # Median line
+  geom_line(data = summary_weighting_magicc, 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # Ou and Iyer et al. 2021 line
+  geom_line(data = ou_data, 
+            aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
+            linewidth = 0.7) +
+  
+  # Add labels and theme
+  labs(
+    title = "Constrained/Weighted Projections -- MAGICC Emulation",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector (MAGICC Emulated) Median" = "black",
+      "Ou and Iyer et al. 2021" = "red"
+    )
+  ) +
+  
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12), # Facet label size
+    legend.position = c(0.82, 0.2), # Manually position the legend
+    legend.justification = "center"
+  )
+
+magicc_emulated_plot_weighted
