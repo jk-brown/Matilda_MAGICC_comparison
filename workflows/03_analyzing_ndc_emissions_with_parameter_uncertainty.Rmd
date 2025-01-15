@@ -226,27 +226,286 @@ no_weighting_plot_bau <- subset(no_weighting_plot_df,
 magicc_bau <- read.csv("data/raw-data/T_01_BAU_magicc.csv")
 
 parametric_uncertainty_bau <- ggplot() +
+  # CMIP6 ESM lines
+  geom_line(data = cmip6_tas, 
+            aes(year, value, group = interaction(model), color = "CMIP6 ESM"), 
+            alpha = 0.5, color = "darkgrey", linewidth = 0.3) +
+  
+  # No-weighting ribbons
   geom_ribbon(data = no_weighting_plot_bau, 
-              aes(x = year, 
-                  ymin = ci_10, 
-                  ymax = ci_90), 
-              fill = "grey", alpha = 0.5) +
+              aes(x = year, ymin = ci_10, ymax = ci_90), 
+              fill = "grey", alpha = 0.4) +
   geom_ribbon(data = no_weighting_plot_bau, 
-              aes(x = year, 
-                  ymin = ci_33, 
-                  ymax = ci_67), 
-              fill = 'orange', alpha = 0.5) +
+              aes(x = year, ymin = ci_33, ymax = ci_67), 
+              fill = 'orange', alpha = 0.4) +
+  
+  # No-weighting median line
   geom_line(data = no_weighting_plot_bau, 
-            aes(x = year, y = median), 
+            aes(x = year, y = median, color = "Hector Median"), 
             color = "black") +
+  
+  # MAGICC lines and uncertainty
   geom_line(data = magicc_bau, 
-            aes(x = year, 
-                y = value), 
-            color = "red")
+            aes(x = year, y = value, color = "MAGICC Median"), 
+            color = "red") +
+  geom_ribbon(data = magicc_unc, 
+              aes(x = year, ymin = lower, ymax = upper), 
+              color = "red", linetype = "dashed", fill = NA, alpha = 0.2) +
+
+  # Titles, labels, and theme
+  labs(
+    title = "Unconstrianed/Unweighted Parametric Uncertainty in BAU Scenario",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  )
+
 parametric_uncertainty_bau
 
 ggsave("no_weighting_exp_param_uncertainty_BAU.png", 
        device = "png", 
+       height = 7, 
+       width = 10, 
+       units = "in",
+       dpi = 300)
+```
+
+```{r}
+cmip6_dat <- read.csv("data/raw-data/cmip6_rslts.csv") %>% 
+  select(-X)
+
+cmip6_tas <- cmip6_dat %>% 
+  filter(variable == "global_tas",
+         scenario == "ssp245", 
+         year > 1994)
+
+cmip6_plot <- ggplot() +
+  geom_line(data = cmip6_tas, aes(year, value, group = interaction(model), color = "CMIP6 ESM"), alpha = 0.5)
+cmip6_plot
+```
+
+Figure showing the entire ensemble (unweighted/unconstrianed):
+```{r}
+obs_temp <- data.frame(year = criterion_temp$years, value = criterion_temp$obs_values)
+
+obs_temp_sd <- obs_temp %>% 
+  mutate(sd = sd(value))
+
+ggplot() +
+  geom_line(data = subset(gsat_data$T_01_BAU, year > 1849), 
+            aes(x = year, y = normalized_value, group = run_number, color = "Hector Ensemble (3000 member)"), alpha = 0.4,
+          linewidth = 0.1) +
+  geom_line(data = obs_temp, aes(x = year, y = value, color = "Historic Temperature (one SD)")) +
+  geom_ribbon(data = obs_temp_sd, aes(x = year, ymin = value - sd, ymax = value + sd), alpha = 0.3, fill = "navy") +
+  
+  # Adding the median and CI projection
+  geom_ribbon(data = no_weighting_plot_bau, 
+              aes(x = year, ymin = ci_05, ymax = ci_95), 
+              fill = "red", alpha = 0.1) +
+  geom_ribbon(data = no_weighting_plot_bau, 
+              aes(x = year, ymin = ci_10, ymax = ci_90), 
+              fill = "red", alpha = 0.2) +
+  geom_ribbon(data = no_weighting_plot_bau, 
+              aes(x = year, ymin = ci_33, ymax = ci_67), 
+              fill = 'red', alpha = 0.4) +
+  
+  # No-weighting median line
+  geom_line(data = no_weighting_plot_bau, 
+            aes(x = year, y = median, color = "Hector Median")) +
+  # Add labels and theme
+  labs(
+    title = "Unconstrained/Unweighted Hector Ensemble (BAU)",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Ensemble (3000 member)" = "grey",
+      "Hector Median" = "darkred",
+      "Historic Temperature (one SD)" = "navy"
+    )
+  ) +
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = c(0.01, 0.99),  # Use this to place the legend inside the panel
+    legend.justification = c(0, 1), # Align legend's top-left corner
+    legend.background = element_rect(fill = "white", color = "black")
+  )
+
+ggsave("unweighted_ensemble_bau.png", 
+       device = "png", 
+       height = 7, 
+       width = 10, 
+       units = "in",
+       dpi = 300)
+```
+Figure showing the entire weighted/constrained ensemble:
+```{r}
+ggplot() +
+  geom_line(
+    data = subset(gsat_data$T_01_BAU, year > 1849),
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Hector Ensemble (3000 member)"
+    ),
+    alpha = 0.4,
+    linewidth = 0.1
+  ) +
+  geom_line(
+    data = subset(gsat_data_normalized$T_01_BAU, year > 1849),
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Constrained Ensemble (600 member)", 
+      alpha = mc_weight
+    ),
+    linewidth = 0.1
+  ) +
+  scale_alpha_continuous(range(c(0.8, 1))) + # how extreme should the transparency gradient be - this is optional
+  guides(alpha = "none") + # remove alpha legend 
+  # Add labels and theme
+  labs(
+    title = "600-member Constrained Hector Ensemble (BAU)",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  geom_line(data = obs_temp, aes(x = year, y = value, color = "Historic Temperature (one SD)")) +
+  geom_ribbon(data = obs_temp_sd, aes(x = year, ymin = value - sd, ymax = value + sd), alpha = 0.3, fill = "navy") +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Ensemble (3000 member)" = "grey",
+      "Constrained Ensemble (600 member)" = "#31A354",
+      "Historic Temperature (one SD)" = "navy"
+    )
+  ) +
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = c(0.01, 0.99),  # Use this to place the legend inside the panel
+    legend.justification = c(0, 1), # Align legend's top-left corner
+    legend.background = element_rect(fill = "white", color = "black")
+  )
+
+ ggsave("constrained_ensemble_bau.png", 
+        device = "png", 
+        height = 7, 
+        width = 10, 
+        units = "in",
+        dpi = 300)
+```
+Figure showing the entire weighted/constrained ensemble -- with median and range:
+```{r}
+ggplot() +
+  geom_line(
+    data = subset(gsat_data$T_01_BAU, year > 1849),
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Hector Ensemble (3000 member)"
+    ),
+    alpha = 0.4,
+    linewidth = 0.1
+  ) +
+  geom_line(
+    data = subset(gsat_data_normalized$T_01_BAU, year > 1849),
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Constrained Ensemble (600 member)", 
+      alpha = mc_weight
+    ),
+    linewidth = 0.1
+  ) +
+  scale_alpha_continuous(range(c(0.8, 1))) + # how extreme should the transparency gradient be - this is optional
+  guides(alpha = "none") + # remove alpha legend 
+  # Add labels and theme
+  labs(
+    title = "600-member Constrained Hector Ensemble (BAU)",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  geom_line(data = obs_temp, aes(x = year, y = value, color = "Historic Temperature (one SD)")) +
+  geom_ribbon(data = obs_temp_sd, aes(x = year, ymin = value - sd, ymax = value + sd), alpha = 0.3, fill = "navy") +
+  
+  # Adding the median and CI projection
+  geom_ribbon(data = weighting_plot_bau, 
+              aes(x = year, ymin = ci_05, ymax = ci_95), 
+              fill = "red", alpha = 0.2) +
+  geom_ribbon(data = weighting_plot_bau, 
+              aes(x = year, ymin = ci_10, ymax = ci_90), 
+              fill = "red", alpha = 0.3) +
+  geom_ribbon(data = weighting_plot_bau, 
+              aes(x = year, ymin = ci_33, ymax = ci_67), 
+              fill = 'red', alpha = 0.5) +
+  
+  # Median line
+  geom_line(data = weighting_plot_bau, 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # add magic range
+  geom_ribbon(data = magicc_unc, 
+              aes(x = year, ymin = lower, ymax = upper, color = "MAGICC Range"), fill = NA, linetype = "dashed", linewidth = 0.7) +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Ensemble (3000 member)" = "grey",
+      "Constrained Ensemble (600 member)" = "#31A354",
+      "Historic Temperature (one SD)" = "navy", 
+      "Hector Median" = "darkred", 
+      "MAGICC Range" = "dodgerblue"
+    )
+  ) +
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = c(0.01, 0.99),  # Use this to place the legend inside the panel
+    legend.justification = c(0, 1), # Align legend's top-left corner
+    legend.background = element_rect(fill = "white", color = "black")
+  )
+
+ggsave("constrained_ensemble_bau_weighted_median_w_MAGICC.png",
+       device = "png",
+       height = 7,
+       width = 10,
+       units = "in",
        dpi = 300)
 ```
 

@@ -34,7 +34,7 @@ model_scores <- lapply(model_result, function(df) {
   
   score_list <- list(temp_wt, co2_wt, ocean_uptake_wt)
   
-  mc_score <- multi_criteria_weighting(score_list, criterion_weights = c(0.9, 0.05, 0.05))
+  mc_score <- multi_criteria_weighting(score_list, criterion_weights = c(.9, 0.05, 0.05))
   
   return(mc_score)
 })
@@ -115,62 +115,163 @@ weighting_plot_df <- subset(weighting_plot_df, year > 1994)
 weighting_plot_df <- weighting_plot_df %>% 
   filter(!scenario %in% c("T_06_NDC_cont", "T_07_NDC_inc_LTS"))
 
+# load ou and Iyer data
+ou_data <- read.csv("data/raw-data/ou_Iyer_global_mean_temperature.csv")
+
 parametric_uncertainty_plot_weighted <- ggplot() +
+  # Ribbon for 10th-90th percentile
   geom_ribbon(data = weighting_plot_df, 
               aes(x = year, 
                   ymin = ci_10, 
                   ymax = ci_90), 
               fill = "grey", alpha = 0.5) +
+  
+  # Ribbon for 33rd-67th percentile
   geom_ribbon(data = weighting_plot_df, 
               aes(x = year, 
                   ymin = ci_33, 
                   ymax = ci_67), 
               fill = 'orange', alpha = 0.5) +
-    geom_line(data = weighting_plot_df, 
-            aes(x = year, y = median), 
-            color = "black") +
+  
+  # Median line
+  geom_line(data = weighting_plot_df, 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # Ou and Iyer et al. 2021 line
+  geom_line(data = ou_data, 
+            aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
+            linewidth = 0.7) +
+  
+  # Facet by scenario
   facet_wrap(~scenario) +
-  theme_light() 
+  
+  # Add labels and theme
+  labs(
+    title = "Constrained/Weighted Projections",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Median" = "black",
+      "Ou and Iyer et al. 2021" = "red"
+    )
+  ) +
+  
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12), # Facet label size
+    legend.position = c(0.82, 0.2), # Manually position the legend
+    legend.justification = "center"
+  )
+
 parametric_uncertainty_plot_weighted
 
-ggsave("parameteric_uncertainty_weighted.png", 
-       device = "png", 
+
+ggsave("emissions_projections_weighted.png", 
+       device = "png",
+       height = 7, 
+       width = 10, 
+       units = "in",
        dpi = 300)
 ```
+
+```{r}
+bau_ou <- ou_data %>% 
+  filter(scenario == "T_01_BAU")
+
+ggplot() +
+  geom_line(data = bau_ou, 
+            aes(x = year, y = value)) +
+  geom_line(data = magicc_bau, 
+            aes(x = year, y = value))
+```
+
 Plotting BAU scenario against MAGICC:
 ```{r}
 weighting_plot_bau <- subset(weighting_plot_df, 
                                year > 1994 &
                                  scenario == "T_01_BAU")
 magicc_bau <- read.csv("data/raw-data/T_01_BAU_magicc.csv")
+magicc_unc <- read.csv("data/raw-data/cmip6_unc.csv")
 
 parametric_uncertainty_weighted_bau <- ggplot() +
+  # CMIP6 ESM lines
+  geom_line(data = cmip6_tas, 
+            aes(year, value, group = interaction(model), color = "CMIP6 ESM"), 
+            alpha = 0.2) +
+  
+  # Weighted uncertainty ribbons and median
   geom_ribbon(data = weighting_plot_bau, 
-              aes(x = year, 
-                  ymin = ci_10, 
-                  ymax = ci_90), 
-              fill = "lightblue", alpha = 0.5) +
+              aes(x = year, ymin = ci_10, ymax = ci_90), 
+              fill = "#3B9AB2", alpha = 0.1, color = "#3B9AB2", linetype = "dashed", linewidth = 0.5, show.legend = FALSE) +
   geom_line(data = weighting_plot_bau, 
-            aes(x = year, y = median), 
-            color = "navy") +
-  geom_ribbon(data = no_weighting_plot_bau, 
-              aes(x = year, 
-                  ymin = ci_10, 
-                  ymax = ci_90), 
-              fill = "pink", alpha = 0.5) +
-  geom_line(data = no_weighting_plot_bau, 
-            aes(x = year, y = median), 
-            color = "darkred") +
-    geom_line(data = magicc_bau, 
-            aes(x = year, 
-                y = value), 
-            color = "forestgreen", 
+            aes(x = year, y = median, color = "Weighted Median (Hector + Matilda)"), 
             linewidth = 0.7) +
-  theme_light()
+  
+  # MAGICC uncertainty ribbons and median
+  geom_line(data = magicc_bau, 
+            aes(x = year, y = value, color = "MAGICC Median"), 
+            linewidth = 0.7) +
+  geom_ribbon(data = magicc_unc, 
+              aes(x = year, ymin = lower, ymax = upper), 
+              color = "#F21A00", fill = NA, linetype = "dashed", show.legend = FALSE) +
+  
+  # No weighting ribbons and median
+  geom_ribbon(data = no_weighting_plot_bau, 
+              aes(x = year, ymin = ci_10, ymax = ci_90), 
+              fill = "#EBCC2A", alpha = 0.1, color = "#EBCC2A", linetype = "dashed", show.legend = FALSE) +
+  geom_line(data = no_weighting_plot_bau, 
+            aes(x = year, y = median, color = "Unweighted Median (Hector + Matilda)"), 
+            linewidth = 0.7) +
+  
+  # Titles, labels, and theme
+  labs(
+    title = "Constrained/Weighted vs. Unconstrained/Unweighted BAU Scenario",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  # Custom legend colors
+  scale_color_manual(
+    values = c(
+      "CMIP6 ESM" = "darkgrey",
+      "MAGICC Median" = "#F21A00",
+      "Weighted Median (Hector + Matilda)" = "#3B9AB2",
+      "Unweighted Median (Hector + Matilda)" = "#EBCC2A"
+    )
+  ) +
+  
+  theme_light() +
+   theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = c(0.01, 0.99),  # Use this to place the legend inside the panel
+    legend.justification = c(0, 1), # Align legend's top-left corner
+    legend.background = element_rect(fill = "white", color = "black")
+  )
+
+
 parametric_uncertainty_weighted_bau
 
 ggsave("weighted_unweighted_comparison.png", 
        device = "png", 
+       height = 7, 
+       width = 10, 
+       units = "in",
        dpi = 300)
 
 ```
@@ -273,7 +374,7 @@ probability_plot <-
       expression(paste(" > 4.0", ~degree, "C"))),
     name = "Warming") + # name of the legend
   labs(y = "Probability",
-       x = "Forcing Scenario", 
+       x = "Scenario", 
        title = "Probability of Warming") +
   coord_flip() + # flip the coordinates of the figure to make horizontal representation
   theme_light() + # set theme - personal preference 
@@ -281,7 +382,7 @@ probability_plot <-
 
 probability_plot
 
-ggsave("probability_plot.png", 
+ggsave("constrained_probability_plot.png", 
        device = "png",
        dpi = 300, 
        height = 4)
