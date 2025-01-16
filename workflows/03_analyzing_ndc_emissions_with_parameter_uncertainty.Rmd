@@ -52,6 +52,7 @@ param_core <- newcore(system.file("input/hector_ssp245.ini", package = "hector")
 params <- generate_params(core = param_core,
                           draws = n)
 
+write.csv(params, "data/output/initial_params.csv")
 ```
 
 ### Split jobs for parallel processing
@@ -219,6 +220,22 @@ ggsave("no_weighting_exp_param_uncertainty.png",
        dpi = 300)
 ```
 
+
+```{r}
+cmip6_dat <- read.csv("data/raw-data/cmip6_rslts.csv") %>% 
+  select(-X)
+
+cmip6_tas <- cmip6_dat %>% 
+  filter(variable == "global_tas",
+         scenario == "ssp245", 
+         year > 1994)
+
+cmip6_plot <- ggplot() +
+  geom_line(data = cmip6_tas, aes(year, value, group = interaction(model), color = "CMIP6 ESM"), alpha = 0.5)
+cmip6_plot
+```
+
+
 ```{r}
 no_weighting_plot_bau <- subset(no_weighting_plot_df, 
                                year > 1994 &
@@ -277,20 +294,6 @@ ggsave("no_weighting_exp_param_uncertainty_BAU.png",
        width = 10, 
        units = "in",
        dpi = 300)
-```
-
-```{r}
-cmip6_dat <- read.csv("data/raw-data/cmip6_rslts.csv") %>% 
-  select(-X)
-
-cmip6_tas <- cmip6_dat %>% 
-  filter(variable == "global_tas",
-         scenario == "ssp245", 
-         year > 1994)
-
-cmip6_plot <- ggplot() +
-  geom_line(data = cmip6_tas, aes(year, value, group = interaction(model), color = "CMIP6 ESM"), alpha = 0.5)
-cmip6_plot
 ```
 
 Figure showing the entire ensemble (unweighted/unconstrianed):

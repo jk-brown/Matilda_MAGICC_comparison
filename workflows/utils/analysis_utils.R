@@ -37,3 +37,19 @@ normalize_single_series <- function(df, reference_start, reference_end) {
   
   return(df)
 }
+
+
+# Sampling magicc_emulated params
+### df: a data frame that includes mean and sd values for "emulated" parameters. 
+sample_emulated_params <- function(df, draws) {
+  
+  # data frame of random parameter values drawn from normal or lognormal distributions
+  data.frame(
+    "BETA" = rnorm(draws, mean = df$BETA, sd = df$BETA_sd),
+    "Q10_RH" = rlnorm(draws, matilda:::lognorm(df$Q10_RH, df$Q10_RH_sd)[1], matilda:::lognorm(df$Q10_RH, df$Q10_RH_sd)[2]),
+    "NPP_FLUX0" = rnorm(draws, mean = df$NPP_FLUX0, sd = df$NPP_FLUX0_sd),
+    "AERO_SCALE" = rnorm(draws, mean = df$AERO_SCALE, sd = df$AERO_SCALE_sd),
+    "DIFFUSIVITY" = rnorm(draws, mean = df$DIFFUSIVITY, sd = df$DIFFUSIVITY_sd),
+    "ECS" = rlnorm(draws, matilda:::lognorm(df$ECS, ECS_sd)[1], matilda:::lognorm(df$ECS, df$ECS_sd)[2])
+  )
+}
