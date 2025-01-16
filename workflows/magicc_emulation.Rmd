@@ -78,44 +78,50 @@ gsat_data_normalized_magicc <- normalize_to_reference(gsat_data_weighted_magicc,
 summary_weighting_magicc <-  gsat_data_normalized_magicc %>%
   group_by(year) %>%
   summarise(
-    median = weighted.quantile(normalized_value, w = weights, probs = 0.50),
-    ci_05 = weighted.quantile(normalized_value, w = weights, probs = 0.05),
-    ci_10 = weighted.quantile(normalized_value, w = weights, probs = 0.10),
-    ci_33 = weighted.quantile(normalized_value, w = weights, probs = 0.33),
-    ci_67 = weighted.quantile(normalized_value, w = weights, probs = 0.67),
-    ci_90 = weighted.quantile(normalized_value, w = weights, probs = 0.90),
-    ci_95 = weighted.quantile(normalized_value, w = weights, probs = 0.95),
+    median = quantile(normalized_value, probs = 0.50),
+    ci_05 = quantile(normalized_value, probs = 0.05),
+    ci_10 = quantile(normalized_value, probs = 0.10),
+    ci_33 = quantile(normalized_value, probs = 0.33),
+    ci_67 = quantile(normalized_value, probs = 0.67),
+    ci_90 = quantile(normalized_value, probs = 0.90),
+    ci_95 = quantile(normalized_value, probs = 0.95),
     .groups = "drop"
-  )
+  ) %>% 
+  subset(year > 1994)
 
 ```
 
 ## plotting the weighted results 
 ```{r}
 magicc_emulated_plot_weighted <- ggplot() +
-  # Ribbon for 10th-90th percentile
-  geom_ribbon(data = summary_weighting_magicc, 
-              aes(x = year, 
-                  ymin = ci_10, 
-                  ymax = ci_90), 
-              fill = "grey", alpha = 0.5) +
   
-  # Ribbon for 33rd-67th percentile
-  geom_ribbon(data = summary_weighting_magicc, 
-              aes(x = year, 
-                  ymin = ci_33, 
-                  ymax = ci_67), 
-              fill = 'orange', alpha = 0.5) +
+  # # Ribbon for 10th-90th percentile
+  # geom_ribbon(data = summary_weighting_magicc, 
+  #             aes(x = year, 
+  #                 ymin = ci_10, 
+  #                 ymax = ci_90), 
+  #             fill = "grey", alpha = 0.5) +
+  # 
+  # # Ribbon for 33rd-67th percentile
+  # geom_ribbon(data = summary_weighting_magicc, 
+  #             aes(x = year, 
+  #                 ymin = ci_33, 
+  #                 ymax = ci_67), 
+  #             fill = 'orange', alpha = 0.5) +
   
   # Median line
   geom_line(data = summary_weighting_magicc, 
-            aes(x = year, y = median, color = "Hector Median"), 
+            aes(x = year, y = median, color = "Hector (MAGICC Emulated) Median"), 
             linewidth = 0.7) +
   
   # Ou and Iyer et al. 2021 line
-  geom_line(data = ou_data, 
+  geom_line(data = subset(ou_data, scenario == "T_01_BAU"), 
             aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
             linewidth = 0.7) +
+  
+  # geom_ribbon(data = magicc_unc, 
+  #             aes(x = year, ymin = lower, ymax = upper), 
+  #             color = "red", linetype = "dashed", fill = NA, alpha = 0.2) +
   
   # Add labels and theme
   labs(
@@ -141,8 +147,192 @@ magicc_emulated_plot_weighted <- ggplot() +
     legend.title = element_text(size = 12),
     legend.text = element_text(size = 10),
     strip.text = element_text(size = 12), # Facet label size
-    legend.position = c(0.82, 0.2), # Manually position the legend
+    legend.position = c(0.2, 0.8), # Manually position the legend
     legend.justification = "center"
   )
 
 magicc_emulated_plot_weighted
+
+```
+
+
+# Weighted parameters
+
+Now merge the weights of this analysis with initial params. This will give the weights to the parameter sets that produce a median that is close to MAGICC. 
+
+Compare the updated parameter range to the initial parameter range.
+
+```{r}
+params$run_number <- 1:nrow(params)
+
+magicc_emulated_params <- merge(params, top_600_scores_magicc, by = "run_number")
+
+param_summary_magicc_emulated <- data.frame(
+  BETA = mean(magicc_emulated_params$BETA),
+  BETA_sd = sd(magicc_emulated_params$BETA), 
+  Q10_RH = mean(magicc_emulated_params$Q10_RH), 
+  Q10_RH_sd = sd(magicc_emulated_params$Q10_RH), 
+  NPP_FLUX0 = mean(magicc_emulated_params$NPP_FLUX0), 
+  NPP_FLUX0_sd = sd(magicc_emulated_params$NPP_FLUX0), 
+  AERO_SCALE = mean(magicc_emulated_params$AERO_SCALE), 
+  AERO_SCALE_sd = sd(magicc_emulated_params$AERO_SCALE), 
+  DIFFUSIVITY = mean(magicc_emulated_params$DIFFUSIVITY), 
+  DIFFUSIVITY_sd = sd(magicc_emulated_params$DIFFUSIVITY), 
+  ECS = mean(magicc_emulated_params$ECS), 
+  ECS_sd = sd(magicc_emulated_params$ECS)
+)
+
+write.csv(param_summary_magicc_emulated, "data/output/magicc_emulated_param_summary.csv")
+```
+
+Should be able to use the new parameter set as the baseline for a new sampling.
+
+### Build parameter set with MAGICC emulated parameter priors:
+
+```{r, construct perturbed parameter set}
+# set seed for replication
+set.seed(123)
+
+# set sample size for param generation
+n = 3000
+
+# generate param set
+magicc_params <- sample_emulated_params(param_summary_magicc_emulated, draws = n)
+
+write.csv(magicc_params, "data/output/magicc_params.csv")
+```
+
+### Split jobs for parallel processing
+
+```{r, split params into chunks and prepare cluster}
+# splitting params df into chunks
+param_chunks <- split(magicc_params, 1:1000)
+
+# prep cluster
+# initiate a cluster
+cluster <- makeCluster(detectCores() - 1)
+
+# export functions and objects to the core
+clusterExport(cluster, c("input_file_list", 
+                         "param_chunks", 
+                         "newcore", 
+                         "reset", 
+                         "iterate_model"))
+
+```
+
+### Run the model
+```{r, run the model with each ini file}
+
+# run the model 
+time_start = Sys.time()
+
+magicc_emulated_model_result <- parLapply(cluster, names(input_file_list), function(scenario_name){
+
+  # extract scenario information 
+  scenario <- input_file_list[[scenario_name]]
+  
+  # initialize a model core for the current scenario
+  core <- newcore(scenario, name = scenario_name)
+  
+  # run the model looking across param_chunks 
+  result_list <- lapply(param_chunks, function(chunk) {
+    
+    iterate_model(core = core, 
+                  params = chunk,
+                  save_years = 1800:2100,
+                  save_vars = c("gmst",
+                                "CO2_concentration",
+                                "global_tas",
+                                "ocean_uptake"))
+  })
+  
+  # reset core for each iteration
+  reset(core)
+  
+  # Convert run_number to continuous among chunks 
+  for (i in 2:length(result_list)) {
+    
+    # calculate the max run_number of the previous element in result_list
+    max_run_number <- max(result_list[[i-1]]$run_number)
+    
+    # Add the max run_number of the previous element to the run_number of the current element
+    result_list[[i]]$run_number <- result_list[[i]]$run_number + max_run_number
+    
+  }
+  
+  bind_result <- do.call(rbind, result_list)
+  
+  return(bind_result)
+  
+})
+
+time_end = Sys.time() - time_start
+
+```
+
+Add names to the new list
+```{r}
+names(magicc_emulated_model_result) <- names(input_file_list)
+```
+
+Save the result:
+```{r}
+# save result as .RDS file
+saveRDS(magicc_emulated_model_result, "data/output/magicc_emulated_model_result.RDS")
+
+```
+
+### Get normalized temperature (global_tas values)
+
+Normalize temperature to pre-industrial reference period 1850-1900.
+
+### Compute summary statistics
+
+```{r}
+## normalize the result 
+model_result_normalized <- lapply(model_result, function(df) {
+  
+  norm_dat = normalize_to_reference(df, reference_start = 1850, reference_end = 1900)
+  
+  return(norm_dat)
+  
+  })
+
+# get names 
+names(model_result_normalized) <- names(model_result)
+
+## subset to only include the variable of interest
+gsat_data <- lapply(model_result_normalized, function(df) {
+  
+  subset_data = subset(df, variable == "global_tas")
+  
+  return(subset_data)
+})
+
+## compute summary statistics
+summary_no_weighting <- lapply(names(gsat_data), function(scenario_names) {
+  
+  df = gsat_data[[scenario_names]]
+  
+  summary_no_wts <- df %>% 
+  group_by(year) %>% 
+  summarise(
+    median = quantile(normalized_value, probs = 0.50), 
+    ci_05 = quantile(normalized_value, probs = 0.05),
+    ci_10 = quantile(normalized_value, probs = 0.10),
+    ci_33 = quantile(normalized_value, probs = 0.33),
+    ci_67 = quantile(normalized_value, probs = 0.67), 
+    ci_90 = quantile(normalized_value, probs = 0.90), 
+    ci_95 = quantile(normalized_value, probs = 0.95), 
+    .groups = "drop"
+  )
+  
+  summary_no_wts$scenario = scenario_names
+  
+  return(summary_no_wts)
+  
+})
+
+
+```
