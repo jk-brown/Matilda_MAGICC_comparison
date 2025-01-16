@@ -50,6 +50,6 @@ sample_emulated_params <- function(df, draws) {
     "NPP_FLUX0" = rnorm(draws, mean = df$NPP_FLUX0, sd = df$NPP_FLUX0_sd),
     "AERO_SCALE" = rnorm(draws, mean = df$AERO_SCALE, sd = df$AERO_SCALE_sd),
     "DIFFUSIVITY" = rnorm(draws, mean = df$DIFFUSIVITY, sd = df$DIFFUSIVITY_sd),
-    "ECS" = rlnorm(draws, matilda:::lognorm(df$ECS, ECS_sd)[1], matilda:::lognorm(df$ECS, df$ECS_sd)[2])
+    "ECS" = rlnorm(draws, matilda:::lognorm(df$ECS, df$ECS_sd)[1], matilda:::lognorm(df$ECS, df$ECS_sd)[2])
   )
 }
