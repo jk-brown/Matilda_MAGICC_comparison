@@ -53,3 +53,30 @@ sample_emulated_params <- function(df, draws) {
     "ECS" = rlnorm(draws, matilda:::lognorm(df$ECS, df$ECS_sd)[1], matilda:::lognorm(df$ECS, df$ECS_sd)[2])
   )
 }
+
+# Using LHS smapling 
+
+library(lhs)
+
+lhs_params <- function(core, draws) {
+  # Fetch values for the parameters
+  beta <- fetchvars(core, NA, BETA())
+  q10 <- fetchvars(core, NA, Q10_RH())
+  npp <- fetchvars(core, NA, NPP_FLUX0())
+  aero <- fetchvars(core, NA, AERO_SCALE())
+  ohd <- fetchvars(core, NA, DIFFUSIVITY())
+  ecs <- fetchvars(core, NA, ECS())
+  
+  # Generate Latin Hypercube Samples (LHS)
+  lhs_samples <- randomLHS(draws, 6)  # 6 parameters
+  
+  # Transform LHS samples to appropriate distributions
+  data.frame(
+    "BETA" = qnorm(lhs_samples[,1], mean = beta$value, sd = 0.1),
+    "Q10_RH" = qlnorm(lhs_samples[,2], matilda:::lognorm(q10$value, 1.0)[1], matilda:::lognorm(q10$value, 1.0)[2]),
+    "NPP_FLUX0" = qnorm(lhs_samples[,3], mean = npp$value, sd = 14.3),
+    "AERO_SCALE" = qnorm(lhs_samples[,4], mean = aero$value, sd = 0.23),
+    "DIFFUSIVITY" = qnorm(lhs_samples[,5], mean = ohd$value, sd = 0.118),
+    "ECS" = qlnorm(lhs_samples[,6], matilda:::lognorm(ecs$value, 0.65)[1], matilda:::lognorm(ecs$value, 0.65)[2])
+  )
+}

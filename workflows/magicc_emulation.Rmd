@@ -290,8 +290,16 @@ Normalize temperature to pre-industrial reference period 1850-1900.
 ### Compute summary statistics
 
 ```{r}
+# remove NAs from the the magicc emulated model result
+magicc_model <- lapply(magicc_emulated_model_result, function(df) {
+  
+  no_NAs <- na.omit(df)
+  
+  return(no_NAs)
+})
+
 ## normalize the result 
-model_result_normalized <- lapply(model_result, function(df) {
+magicc_result_normalized <- lapply(magicc_model, function(df) {
   
   norm_dat = normalize_to_reference(df, reference_start = 1850, reference_end = 1900)
   
@@ -300,10 +308,10 @@ model_result_normalized <- lapply(model_result, function(df) {
   })
 
 # get names 
-names(model_result_normalized) <- names(model_result)
+names(magicc_result_normalized) <- names(magicc_emulated_model_result)
 
 ## subset to only include the variable of interest
-gsat_data <- lapply(model_result_normalized, function(df) {
+magicc_gsat_data <- lapply(magicc_result_normalized, function(df) {
   
   subset_data = subset(df, variable == "global_tas")
   
@@ -311,9 +319,9 @@ gsat_data <- lapply(model_result_normalized, function(df) {
 })
 
 ## compute summary statistics
-summary_no_weighting <- lapply(names(gsat_data), function(scenario_names) {
+magicc_summary_no_weighting <- lapply(names(magicc_gsat_data), function(scenario_names) {
   
-  df = gsat_data[[scenario_names]]
+  df = magicc_gsat_data[[scenario_names]]
   
   summary_no_wts <- df %>% 
   group_by(year) %>% 
@@ -334,5 +342,31 @@ summary_no_weighting <- lapply(names(gsat_data), function(scenario_names) {
   
 })
 
+
+```
+
+### Plotting the results for Hector parameter uncertainty
+
+```{r}
+# bind data frames together 
+magicc_no_weighting_plot_df <- do.call(rbind, magicc_summary_no_weighting)
+magicc_no_weighting_plot_df <- subset(magicc_no_weighting_plot_df, year > 1994)
+
+magicc_parametric_uncertainty_plot <- ggplot() +
+  geom_ribbon(data = magicc_no_weighting_plot_df, 
+              aes(x = year, 
+                  ymin = ci_10, 
+                  ymax = ci_90), 
+              fill = "grey", alpha = 0.5) +
+  geom_ribbon(data = magicc_no_weighting_plot_df, 
+              aes(x = year, 
+                  ymin = ci_33, 
+                  ymax = ci_67), 
+              fill = 'orange', alpha = 0.5) +
+    geom_line(data = magicc_no_weighting_plot_df, 
+            aes(x = year, y = median), 
+            color = "black") +
+  facet_wrap(~scenario)
+magicc_parametric_uncertainty_plot
 
 ```

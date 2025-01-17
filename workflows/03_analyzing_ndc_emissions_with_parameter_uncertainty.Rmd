@@ -43,16 +43,20 @@ Use the NDC ini list to run Hector with the Matilda workflow.
 set.seed(123)
 
 # set sample size for param generation
-n = 3000
+n = 5000
 
 # initiate a core that can be used to generate parameters -- here we will use SSP2-4.5
 param_core <- newcore(system.file("input/hector_ssp245.ini", package = "hector"))
 
 # generate param set
-params <- generate_params(core = param_core,
-                          draws = n)
+#params <- generate_params(core = param_core,
+#                          draws = n)
 
-write.csv(params, "data/output/initial_params.csv")
+# generate params with lhs
+params <- lhs_params(core = param_core, 
+                     draws = n)
+
+write.csv(params, "data/output/lhs_params.csv")
 ```
 
 ### Split jobs for parallel processing
