@@ -1,0 +1,54 @@
+---
+title: "ECS distribution figure"
+author: "Joe Brown"
+date: "2025-01-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+old_ecs <- data.frame(ECS = params$ECS)
+
+# Plot PDFs
+ecs_plot <- 
+  ggplot() +
+  geom_density(data = old_ecs, aes(x = ECS),
+    alpha = 0.5, linewidth = 1, color = "dodgerblue", adjust = 1.5) + # Density plots
+  labs(
+    title = "Comparison of Old and New ECS Distributions",
+    x = "Equilibrium Climate Sensitivity (ECS)",
+    y = "Density",
+  ) +
+    geom_density(data = ecs_data, aes(x = ECS),
+    alpha = 0.5, linewidth = 1, color = "red3", adjust = 1.5) + # Density plots
+  labs(
+    title = "Comparison of Old and New ECS Distributions",
+    x = "Equilibrium Climate Sensitivity (ECS)",
+    y = "Density",
+  ) +
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+# Print the plot
+ecs_plot
+
+ggsave(
+  "workflows/figures/ecs_distribution_comparison.png", 
+  ecs_plot, 
+  device = "png", 
+  height = 7, 
+  width = 10, 
+  units = "in", 
+  dpi = 300
+)
+```
+

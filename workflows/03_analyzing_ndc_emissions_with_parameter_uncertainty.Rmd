@@ -49,14 +49,16 @@ n = 5000
 param_core <- newcore(system.file("input/hector_ssp245.ini", package = "hector"))
 
 # generate param set
-#params <- generate_params(core = param_core,
-#                          draws = n)
+params <- generate_params(core = param_core,
+                          draws = n)
+# read in new ecs data 
+ecs_data <- read.csv("data/raw-data/ecs_data.csv")
+params$ECS <- ecs_data$ECS
+# # generate params with lhs
+# params <- lhs_params(core = param_core, 
+#                      draws = n)
 
-# generate params with lhs
-params <- lhs_params(core = param_core, 
-                     draws = n)
-
-write.csv(params, "data/output/lhs_params.csv")
+write.csv(params, "data/output/initial_params.csv")
 ```
 
 ### Split jobs for parallel processing
@@ -136,7 +138,7 @@ names(model_result) <- names(input_file_list)
 Save the result:
 ```{r}
 # save result as .RDS file
-saveRDS(model_result, "data/output/model_result.RDS")
+saveRDS(model_result, "data/output/model_result_new_ecs.RDS")
 
 ```
 
@@ -218,10 +220,10 @@ parametric_uncertainty_plot <- ggplot() +
   facet_wrap(~scenario)
 parametric_uncertainty_plot
 
-ggsave("no_weighting_exp_param_uncertainty.png",
-       parametric_uncertainty_plot,
-       device = "png", 
-       dpi = 300)
+# ggsave("no_weighting_exp_param_uncertainty.png",
+#        parametric_uncertainty_plot,
+#        device = "png", 
+#        dpi = 300)
 ```
 
 
@@ -266,7 +268,7 @@ parametric_uncertainty_bau <- ggplot() +
             color = "black") +
   
   # MAGICC lines and uncertainty
-  geom_line(data = magicc_bau, 
+  geom_line(data = subset(ou_data, scenario == "T_01_BAU"), 
             aes(x = year, y = value, color = "MAGICC Median"), 
             color = "red") +
   geom_ribbon(data = magicc_unc, 
@@ -292,10 +294,11 @@ parametric_uncertainty_bau <- ggplot() +
 
 parametric_uncertainty_bau
 
-ggsave("no_weighting_exp_param_uncertainty_BAU.png", 
-       device = "png", 
-       height = 7, 
-       width = 10, 
+ggsave("figures/no_weighting_exp_param_uncertainty_BAU.png",
+       parametric_uncertainty_bau,
+       device = "png",
+       height = 7,
+       width = 10,
        units = "in",
        dpi = 300)
 ```
@@ -307,7 +310,7 @@ obs_temp <- data.frame(year = criterion_temp$years, value = criterion_temp$obs_v
 obs_temp_sd <- obs_temp %>% 
   mutate(sd = sd(value))
 
-ggplot() +
+full_ensemble_plot <- ggplot() +
   geom_line(data = subset(gsat_data$T_01_BAU, year > 1849), 
             aes(x = year, y = normalized_value, group = run_number, color = "Hector Ensemble (3000 member)"), alpha = 0.4,
           linewidth = 0.1) +
@@ -355,14 +358,17 @@ ggplot() +
     legend.justification = c(0, 1), # Align legend's top-left corner
     legend.background = element_rect(fill = "white", color = "black")
   )
+full_ensemble_plot
 
-ggsave("unweighted_ensemble_bau.png", 
-       device = "png", 
-       height = 7, 
-       width = 10, 
+ggsave("figures/unweighted_ensemble_bau.png",
+       full_ensemble_plot,
+       device = "png",
+       height = 7,
+       width = 10,
        units = "in",
        dpi = 300)
 ```
+
 Figure showing the entire weighted/constrained ensemble:
 ```{r}
 ggplot() +
@@ -421,13 +427,14 @@ ggplot() +
     legend.background = element_rect(fill = "white", color = "black")
   )
 
- ggsave("constrained_ensemble_bau.png", 
-        device = "png", 
-        height = 7, 
-        width = 10, 
+ ggsave("constrained_ensemble_bau.png",
+        device = "png",
+        height = 7,
+        width = 10,
         units = "in",
         dpi = 300)
 ```
+
 Figure showing the entire weighted/constrained ensemble -- with median and range:
 ```{r}
 ggplot() +

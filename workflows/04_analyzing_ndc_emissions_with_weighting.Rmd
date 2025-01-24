@@ -42,7 +42,7 @@ Filter the top 200 weights:
 ```{r}
 top_200_scores <- lapply(model_scores, function(df){
   
-  df[order(df$mc_weight, decreasing = TRUE), ][1:600, ]
+  df[order(df$mc_weight, decreasing = TRUE), ][1:1000, ]
 
 })
 
@@ -167,7 +167,7 @@ parametric_uncertainty_plot_weighted <- ggplot() +
     legend.title = element_text(size = 12),
     legend.text = element_text(size = 10),
     strip.text = element_text(size = 12), # Facet label size
-    legend.position = c(0.82, 0.2), # Manually position the legend
+    legend.position.inside = c(0.82, 0.2), # Manually position the legend
     legend.justification = "center"
   )
 
