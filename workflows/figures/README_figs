@@ -1,0 +1,31 @@
+## Figure Descriptions
+
+-- `unfiltered_hector_ensemble_summarized.png` --
+Full Hector ensemble showing result of parameter uncertainty without any scoring or filtering.
+Each panel is a different scenario, solid line is medaian `global_tas`, gold ribbon = 33-67% CI; grey ribbon = 10-90% CI.
+Results normalized to 1850-1900 reference period.
+This data uses results from expanded ECS uncertainty.
+
+-- `BAU_unfiltered_hector_ensemble_summarized_with_magicc_cmip6` --
+Full Hector ensemble showing parameter uncertainty without anyt scoring or filtering for the BAU scenario against CMIP6 and MAGICC7.
+Solid line black is the median `global_tas` variable for the full Hector ensemble for the BAU scenario, gold ribbon = 33-67% CI; grey ribbon = 10-90% CI.
+Solid red line is the median warming projection for the BAU scenario from Ou and Iyer et al.; dashed red ribbon = 90-10% CI for MAGICC, estimated from MAGICC online resource.
+Light grey lines are the CMIP6 ESMs.
+
+-- `BAU_unfiltered_hector_ensemble_spaghetti_with_hist_temp` --
+Spaghetti plot of full HEctor ensemble showing individual ensmeble members without any scoring or filtering for the BAU scenario against observed temperature (GMST).
+Solid grey lines are individual Hector ensemble members (total 5000) as a result of parameter uncertainty in the BAU scenario. 
+Solid red line is the median warming projection for the full Hector ensemble; red ribbons = 33-67% CI, 10-90% CI, and 5-95% CI respectively. 
+Solid blue line is historical temperature (GMST); blue ribbon = one standard deviation. 
+
+-- `scored_filtered_hector_ensemble_summarized` --
+Full Hector ensemble showing result of parameter uncertainty with filtering. Figure shows summarized results from the top 2500 ensemble members.
+Each panel is a different scenario, solid black line is median `global_tas`, gold ribbon = 33-67% CI; grey ribbon = 10-90% CI.
+The red line represents the median warming projection using data from Ou and Iyer et al. 2021.
+Results normalized to 1850-1900 reference period.
+
+-- `filtered_and_unfiltered_hector_comparison_with_magicc.png` --
+Figure shows summarized results for MAGICC, filtered Hector ensemble (top 2500 performing members), and unfiltered Hector ensemble.
+Solid red line show median MAGICC warming projection from Ou and Iyer et al. 2021; red ribbon/dashed lines = 10-90% CI for MAGICC, estimated from MAGICC online resource. 
+Solid yellow line shows median Hector warming projection from full (unfiltered) Hector ensemble; yellow ribbon/dashed lines = 10-90% CI.
+Solid blues line shows median Hector warming projection from scored and filtered (top 50% - 2500 members) Hector ensemble; blue ribbon/dashed lines = 10-90% CI.

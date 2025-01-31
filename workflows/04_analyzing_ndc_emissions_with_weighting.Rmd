@@ -11,44 +11,59 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Goal
 
-The goal of this document is to run Hector with Matilda using NDC emissions scenarios to compare with results from MAGICC7 used in Ou and Iyer 2021.
+The goal of this document is to run Hector with Matilda using NDC emissions scenarios. This analysis is meant to understand how the Hector + Matilda workflow can perform "ignorant" of MAGICC7 data. 
 
-## Weight model results
+We will compare Hector + Matilda results against those from MAGICC7, published in in Ou and Iyer et al. 2021.
 
-Weight the normalized ensemble.  Will need to load the data if not already in global env.
+## Score model results
 
-### Score model runs
+Compute scores for the normalized ensemble members against historical temperature & CO2 data. 
 
+Load the `model_result` data if not already in global env.
+
+Scoring:
 ```{r score model runs}
 
 model_scores <- lapply(model_result, function(df) {
   
-  temp_wt <- score_runs(df, criterion_temp, score_bayesian)
+  temp_wt <- score_runs(df, criterion_temp, score_ramp, w1 = 0.01, w2 = 0.2)
   temp_wt <- na.omit(temp_wt)
   
-  co2_wt <- score_runs(df, criterion_co2_obs(), score_bayesian)
+  co2_wt <- score_runs(df, criterion_co2_obs(), score_ramp, w1 = 2, w2 = 10)
   co2_wt <- na.omit(co2_wt)
   
   score_list <- list(temp_wt, co2_wt)
   
-  mc_score <- multi_criteria_weighting(score_list, criterion_weights = c(0.80, 0.20))
+  mc_score <- multi_criteria_weighting(score_list, criterion_weights = c(0.50, 0.50))
   
   return(mc_score)
 })
 
 ```
 
-Filter the top 200 weights:
+Result is a list with each element corresponding to an emissions scenario. The data frames stored in each element contains scores for each ensemble member. Scores are computed using `score_ramp`. This function provides a score based on used defined "bounds" (w1 and w2). Ensemble members with an average abs difference < w1 are assigned a score of 1, indicating it is essentially equal to the observed data it is being scored against. Ensemble members with an average abs difference > w2 are assigned a score of 0, indicating the ensemble member is too different from the observed data to be considered reliable. All members between the w1-w2 bounds are scored whereby scores decrease linearly as the average abs difference increases.
+
+Here the ensembles are scored against historical temperature, then historical CO2. A weighted "multi-criteria" score is computed to incorporate multiple lines of historical evidence into a single score.
+
+## Filter to get top performing ensemble members
+
+Filter the top 50% of ensembles by weight:
 ```{r}
-top_200_scores <- lapply(model_scores, function(df){
+top_scores <- lapply(model_scores, function(df){
   
-  df[order(df$mc_weight, decreasing = TRUE), ][1:1000, ]
+  top_percentile <- quantile(df$mc_weight, 0.70)
+  
+  top_scores_magicc <- df %>%
+  
+    filter(mc_weight >= top_percentile)
 
 })
 
 ```
 
-merge model weights with model results (for plotting later):
+This result will leave us with the top 2500 performing ensemble members based on their multi-criteria score.
+
+Merge model weights with model results (for plotting later):
 ```{r}
 weighted_ensemble <- Map(function(a, b) {
   
@@ -56,12 +71,12 @@ weighted_ensemble <- Map(function(a, b) {
   
   return(merged)
   
-}, model_result, top_200_scores)
+}, model_result, top_scores)
 
 ```
 
-### Computing summary stats
-```{r}
+## Computing summary stats
+```{r, message=FALSE, warning=FALSE}
 ## subset to only include the variable of interest
 gsat_data_weighted <- lapply(weighted_ensemble, function(df) {
   
@@ -83,17 +98,18 @@ summary_weighting <- lapply(names(gsat_data_normalized), function(scenario_name)
   df <- gsat_data_normalized[[scenario_name]]
   
   summary_wts <- df %>% 
-  group_by(year) %>% 
+  group_by(year) %>%
   summarise(
-    median = weighted.quantile(normalized_value, w = mc_weight, probs = 0.50),
-    ci_05 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.05),
-    ci_10 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.10),
-    ci_33 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.33),
-    ci_67 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.67), 
-    ci_90 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.90), 
-    ci_95 = weighted.quantile(normalized_value, w = mc_weight, probs = 0.95), 
+    median = quantile(normalized_value, probs = 0.50),
+    ci_05 = quantile(normalized_value, probs = 0.05),
+    ci_10 = quantile(normalized_value, probs = 0.10),
+    ci_33 = quantile(normalized_value, probs = 0.33),
+    ci_67 = quantile(normalized_value, probs = 0.67),
+    ci_90 = quantile(normalized_value, probs = 0.90),
+    ci_95 = quantile(normalized_value, probs = 0.95),
     .groups = "drop"
-  )
+  ) %>% 
+  subset(year > 1994)
   
   summary_wts$scenario <- scenario_name
   
@@ -103,7 +119,10 @@ summary_weighting <- lapply(names(gsat_data_normalized), function(scenario_name)
 
 ```
 
-## plotting the weighted results 
+This produces a list of summary statistic results. Each element of the list is a data frame of summary statistics for the median and different confidence bounds at each time step (1994-2100) for the `global_tas` variable, normalized to the 1850-1900 reference period.
+
+## Plotting the results for scored and filtered Hector parameter uncertainty
+
 ```{r}
 # bind data frames together 
 weighting_plot_df <- do.call(rbind, summary_weighting)
@@ -112,23 +131,20 @@ weighting_plot_df <- subset(weighting_plot_df, year > 1994)
 weighting_plot_df <- weighting_plot_df %>% 
   filter(!scenario %in% c("T_06_NDC_cont", "T_07_NDC_inc_LTS"))
 
-# load ou and Iyer data
-ou_data <- read.csv("data/raw-data/ou_Iyer_global_mean_temperature.csv")
-
 parametric_uncertainty_plot_weighted <- ggplot() +
   # Ribbon for 10th-90th percentile
   geom_ribbon(data = weighting_plot_df, 
               aes(x = year, 
                   ymin = ci_10, 
-                  ymax = ci_90), 
-              fill = "grey", alpha = 0.5) +
+                  ymax = ci_90, fill = "Hector 10-90% CI"), 
+              alpha = 0.5) +
   
   # Ribbon for 33rd-67th percentile
   geom_ribbon(data = weighting_plot_df, 
               aes(x = year, 
                   ymin = ci_33, 
-                  ymax = ci_67), 
-              fill = 'orange', alpha = 0.5) +
+                  ymax = ci_67, fill = "Hector 33-67% CI"), 
+              alpha = 0.5) +
   
   # Median line
   geom_line(data = weighting_plot_df, 
@@ -148,16 +164,20 @@ parametric_uncertainty_plot_weighted <- ggplot() +
     title = "Constrained/Weighted Projections",
     x = "Year",
     y = "Temperature Anomaly (°C)",
-    color = "Legend"
+    color = "Legend", 
+    fill = "Uncertainty Bound"
   ) +
   
   # Add custom colors for the legend
   scale_color_manual(
     values = c(
       "Hector Median" = "black",
-      "Ou and Iyer et al. 2021" = "red"
-    )
-  ) +
+      "Ou and Iyer et al. 2021" = "red")) +
+  
+  scale_fill_manual(
+    values = c(
+      "Hector 33-67% CI" = "orange", 
+      "Hector 10-90% CI" = "grey")) +
   
   theme_light() +
   theme(
@@ -173,8 +193,7 @@ parametric_uncertainty_plot_weighted <- ggplot() +
 
 parametric_uncertainty_plot_weighted
 
-
-ggsave("emissions_projections_weighted.png", 
+ggsave("figures/filtered_hector_ensemble_summarized.png", 
        device = "png",
        height = 7, 
        width = 10, 
@@ -182,24 +201,11 @@ ggsave("emissions_projections_weighted.png",
        dpi = 300)
 ```
 
-```{r}
-bau_ou <- ou_data %>% 
-  filter(scenario == "T_01_BAU")
-
-ggplot() +
-  geom_line(data = bau_ou, 
-            aes(x = year, y = value)) +
-  geom_line(data = magicc_bau, 
-            aes(x = year, y = value))
-```
-
-Plotting BAU scenario against MAGICC:
+Using data from the BAU scenario to compare warming projections from unfiltered (unconstrianed), filtered (constrained), and MAGICC from Ou and Iyer et al. 2021:
 ```{r}
 weighting_plot_bau <- subset(weighting_plot_df, 
                                year > 1994 &
                                  scenario == "T_01_BAU")
-magicc_bau <- read.csv("data/raw-data/T_01_BAU_magicc.csv")
-magicc_unc <- read.csv("data/raw-data/cmip6_unc.csv")
 
 parametric_uncertainty_weighted_bau <- ggplot() +
   # CMIP6 ESM lines
@@ -216,7 +222,7 @@ parametric_uncertainty_weighted_bau <- ggplot() +
             linewidth = 0.7) +
   
   # MAGICC uncertainty ribbons and median
-  geom_line(data = magicc_bau, 
+  geom_line(data = subset(ou_data, scenario == "T_01_BAU"), 
             aes(x = year, y = value, color = "MAGICC Median"), 
             linewidth = 0.7) +
   geom_ribbon(data = magicc_unc, 
@@ -264,7 +270,7 @@ parametric_uncertainty_weighted_bau <- ggplot() +
 
 parametric_uncertainty_weighted_bau
 
-ggsave("weighted_unweighted_comparison.png", 
+ggsave("figures/BAU_filtered_and_unfiltered_hector_comparison_with_magicc.png", 
        device = "png", 
        height = 7, 
        width = 10, 
@@ -274,6 +280,8 @@ ggsave("weighted_unweighted_comparison.png",
 ```
 
 
+
+# Computing probability
 ### Define metrics of interest
 
 ```{r define metric for end of century warming}
