@@ -19,7 +19,7 @@ We will compare Hector + Matilda results against those from MAGICC7, published i
 
 Compute scores for the normalized ensemble members against historical temperature & CO2 data. 
 
-Load the `model_result` data if not already in global env.
+Load the `model_result` data if not already in global env. For this analysis you will want to load the `model_result_new_ecs.RDS`.
 
 Scoring:
 ```{r score model runs}
@@ -47,7 +47,7 @@ Here the ensembles are scored against historical temperature, then historical CO
 
 ## Filter to get top performing ensemble members
 
-Filter the top 50% of ensembles by weight:
+Filter the top 30% of ensembles by weight:
 ```{r}
 top_scores <- lapply(model_scores, function(df){
   
@@ -61,7 +61,7 @@ top_scores <- lapply(model_scores, function(df){
 
 ```
 
-This result will leave us with the top 2500 performing ensemble members based on their multi-criteria score.
+This result will leave us with the top 1500 performing ensemble members based on their multi-criteria score.
 
 Merge model weights with model results (for plotting later):
 ```{r}
@@ -278,6 +278,115 @@ ggsave("figures/BAU_filtered_and_unfiltered_hector_comparison_with_magicc.png",
        dpi = 300)
 
 ```
+
+The question with this analysis is whether we can call this "Hector ignorant of MAGICC" because we are not using MAGICC to score the Hector ensemble, but we are using it as a baseline to match the uncertainty envelope. 
+
+Being truly ignorant of MAGICC might be a full framework of default score procedures of some kind.
+
+## How full scored/filtered ensemble aligns with historical temperature
+
+Figure showing the scored and filtered ensemble against observed temperature. For this figure we create a spaghetti plot of all Hector ensemble members (global_tas), we highlight the filtered ensemble in green, and overlay historical temperature (GMST). We also add the upper and lower bounds of MAGICC from the online MAGICC resource for comparison:
+
+
+```{r}
+scored_bau_ensemble <- 
+  ggplot() +
+  geom_line(
+    data = subset(gsat_data$T_01_BAU, year > 1849),
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Hector Ensemble (5000 member)"
+    ),
+    alpha = 0.4,
+    linewidth = 0.1
+  ) +
+  geom_line(
+    data = subset(gsat_data_normalized$T_01_BAU, year > 1849),
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Constrained Ensemble (1500 member)" 
+    ), linewidth = 0.1, alpha = 0.3) + 
+  
+  # Adding Historic temperature observations
+  geom_line(data = obs_temp, aes(x = year, y = value, color = "Historic Temperature (one SD)")) +
+  geom_ribbon(data = obs_temp_sd, aes(x = year, ymin = value - sd, ymax = value + sd), alpha = 0.3, fill = "navy") +
+  
+  # Adding the median and CI projection
+  geom_ribbon(data = weighting_plot_bau, 
+              aes(x = year, ymin = ci_33, ymax = ci_67, alpha = "Hector 33-67%"), 
+              fill = 'red') +
+  geom_ribbon(data = weighting_plot_bau, 
+              aes(x = year, ymin = ci_10, ymax = ci_90, alpha = "Hector 10-90%"), 
+              fill = "red") +
+  geom_ribbon(data = weighting_plot_bau, 
+              aes(x = year, ymin = ci_05, ymax = ci_95, alpha = "Hector 05-95%"), 
+              fill = "red") +
+  
+  # Median line
+  geom_line(data = weighting_plot_bau, 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # add magic range
+  geom_ribbon(data = magicc_unc, 
+              aes(x = year, ymin = lower, ymax = upper, color = "MAGICC Range"), fill = NA, linetype = "dashed", linewidth = 0.7) +
+  
+      # Add labels and theme
+  labs(
+    title = "1500-member Constrained Hector Ensemble (BAU)",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend", 
+    alpha = "Uncertainty Bounds"
+  ) +
+  
+  # Add custom colors and alpha level for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Ensemble (5000 member)" = "grey",
+      "Constrained Ensemble (1500 member)" = "#31A354",
+      "Historic Temperature (one SD)" = "navy", 
+      "Hector Median" = "darkred", 
+      "MAGICC Range" = "dodgerblue")) +
+  scale_alpha_manual(
+    values = c(
+      "Hector 33-67%" = 0.4, 
+      "Hector 10-90%" = 0.3, 
+      "Hector 05-95%" = 0.2)) +
+  
+    # Explicitly set legend order
+  guides(
+    color = guide_legend(order = 1),  # First in legend
+    alpha = guide_legend(order = 2)   # Second in legend
+  ) +
+  
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = c(0.01, 0.99),  # Use this to place the legend inside the panel
+    legend.justification = c(0, 1), # Align legend's top-left corner
+    legend.background = element_rect(fill = "white", color = "black"), 
+    legend.spacing.y = unit(0.1, "cm")
+  )
+
+scored_bau_ensemble
+
+ggsave("figures/BAU_filtered_hector_ensemble_spaghetti_with_temp_and_magicc.png",
+       device = "png",
+       height = 7,
+       width = 10,
+       units = "in",
+       dpi = 300)
+```
+
 
 
 
