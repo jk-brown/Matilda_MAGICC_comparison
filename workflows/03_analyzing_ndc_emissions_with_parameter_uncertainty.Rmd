@@ -357,6 +357,15 @@ full_ensemble_with_temp_plot <- ggplot() +
               aes(x = year, ymin = ci_05, ymax = ci_95, alpha = "Hector 05-95%"), 
               fill = "red") +
   
+    # add magic range
+  geom_ribbon(data = magicc_unc, 
+              aes(x = year, ymin = lower, ymax = upper, color = "MAGICC Range"), fill = NA, linetype = "dashed", linewidth = 0.7) +
+  
+      # Ou and Iyer et al. 2021 line
+  geom_line(data = subset(ou_data, scenario == "T_01_BAU"), 
+            aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
+            linewidth = 0.7) +
+  
   # No-weighting median line
   geom_line(data = no_weighting_plot_bau, 
             aes(x = year, y = median, color = "Hector Median")) +
@@ -374,7 +383,9 @@ full_ensemble_with_temp_plot <- ggplot() +
     values = c(
       "Hector Ensemble (5000 member)" = "grey",
       "Hector Median" = "darkred",
-      "Historic Temperature (one SD)" = "navy")) +
+      "Historic Temperature (one SD)" = "navy", 
+      "MAGICC Range" = "dodgerblue", 
+      "Ou and Iyer et al. 2021" = "dodgerblue")) +
   scale_alpha_manual(
     values = c(
       "Hector 33-67%" = 0.4, 
