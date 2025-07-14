@@ -1,0 +1,764 @@
+---
+title: "Emulating MAGICC"
+author: "Joe Brown"
+date: "2025-01-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("utils/source_all.R")
+```
+
+# Goal
+
+Use MAGICC data to run an analysis where Hector + Matilda "emulates" MAGICC. 
+
+To do this:
+
+1. Create a "MAGICC" criterion using the MAGICC warming data from Ou and Iyer. 
+
+2. Use the criterion to weight the Hector ensemble from Matilda.
+
+3. Plot full weighted ensemble -- median and uncertainty range. 
+
+4. Plot constrained ensemble -- selecting the top X number of Hector runs based on weight.
+
+5. Compare parameters of Hector vs. MAGICC emulated Hector.
+
+To start, load `model_result.RDS` from the `data/output` directory.
+
+# New Scoring Criterion using MAGICC
+
+Create new MAGICC criterion:
+```{r}
+# load magicc data
+magicc_data <- read.csv("data/raw-data/ou_Iyer_global_mean_temperature.csv")
+
+```
+
+Create a list of magicc data that can be used to compute model scores for each scenario:
+```{r}
+magicc_data_list <- magicc_data %>%
+  filter(!scenario %in% c("T_06_NDC_cont", "T_07_NDC_inc_LTS")) %>% 
+  split(.$scenario) %>% 
+  lapply(function(df) select(df, -scenario))
+
+model_result[["T_06_NDC_cont"]] <- NULL
+model_result[["T_07_NDC_inc_LTS"]] <- NULL
+  
+```
+
+Create a criterion using each element in the magicc_data_list:
+```{r}
+# create new criterion
+magicc_criterion_list <- lapply(magicc_data_list, function(df) {
+    
+  magicc_criterion <- new_criterion("global_tas", years = df$year, obs_values = df$value)
+  
+  return(magicc_criterion)
+
+  })
+
+```
+
+Score model results using magicc data:
+```{r}
+
+model_scores_magicc <- Map(function(data, criterion, w1, w2) {
+  
+  score_list <- score_runs(data, criterion, score_ramp, w1, w2)
+
+  return(score_list)
+  
+  }, model_result, magicc_criterion_list, MoreArgs = list(w1 = 0.2, w2 = 8.0))
+  
+
+```
+
+## Filter to get top performing ensemble members
+
+Filter the top 30% of ensembles by weight:
+```{r}
+top_magicc_scores <- lapply(model_scores_magicc, function(df){
+  
+  top_percentile <- quantile(df$weights, 0.15)
+  
+  top_magicc_scores <- df %>%
+  
+    filter(weights >= top_percentile)
+
+})
+
+```
+
+This result leaves us with the top 1250 performing ensemble members based on their deviation from magicc projections.
+
+
+Merge model weights with model results (for plotting later):
+```{r}
+weighted_ensemble_magicc <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number")
+  
+  return(merged)
+  
+}, model_result, top_magicc_scores)
+
+```
+
+## Computing summary stats
+```{r, message=FALSE, warning=FALSE}
+## subset to only include the variable of interest
+gsat_data_weighted_magicc <- lapply(weighted_ensemble_magicc, function(df) {
+  
+  subset_data = subset(df, variable == "global_tas")
+  
+  return(subset_data)
+})
+
+## normalize gsat data 
+gsat_data_normalized_magicc <- lapply(gsat_data_weighted_magicc, function(df) {
+  
+  normalize_to_reference(df, reference_start = 1850, reference_end = 1900)
+  
+}) 
+
+## compute summary statistics
+summary_weighting_magicc <- lapply(names(gsat_data_normalized_magicc), function(scenario_name) {
+  
+  df <- gsat_data_normalized_magicc[[scenario_name]]
+  
+  summary_wts <- df %>% 
+  group_by(year) %>%
+  summarise(
+    median = quantile(normalized_value, probs = 0.50),
+    ci_05 = quantile(normalized_value, probs = 0.05),
+    ci_10 = quantile(normalized_value, probs = 0.10),
+    ci_33 = quantile(normalized_value, probs = 0.33),
+    ci_67 = quantile(normalized_value, probs = 0.67),
+    ci_90 = quantile(normalized_value, probs = 0.90),
+    ci_95 = quantile(normalized_value, probs = 0.95),
+    .groups = "drop"
+  ) %>% 
+  subset(year > 1994)
+  
+  summary_wts$scenario <- scenario_name
+  
+  return(summary_wts)
+  
+})
+
+```
+
+```{r}
+# bind data frames together 
+weighting_magicc_plot_df <- do.call(rbind, summary_weighting_magicc)
+weighting_magicc_plot_df <- subset(weighting_magicc_plot_df, year > 1994)
+
+plot_magicc_weighted <- ggplot() +
+  # Ribbon for 10th-90th percentile
+  geom_ribbon(data = weighting_magicc_plot_df, 
+              aes(x = year, 
+                  ymin = ci_10, 
+                  ymax = ci_90, fill = "Hector 10-90% CI"), 
+              alpha = 0.5) +
+  
+  # Ribbon for 33rd-67th percentile
+  geom_ribbon(data = weighting_magicc_plot_df, 
+              aes(x = year, 
+                  ymin = ci_33, 
+                  ymax = ci_67, fill = "Hector 33-67% CI"), 
+              alpha = 0.5) +
+  
+  # Median line
+  geom_line(data = weighting_magicc_plot_df, 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # Ou and Iyer et al. 2021 line
+  geom_line(data = ou_data, 
+            aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
+            linewidth = 0.7) +
+  
+  # Facet by scenario
+  facet_wrap(~scenario) +
+  
+  # Add labels and theme
+  labs(
+    title = "Constrained/Weighted Projections",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend", 
+    fill = "Uncertainty Bound"
+  ) +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Median" = "black",
+      "Ou and Iyer et al. 2021" = "red")) +
+  
+  scale_fill_manual(
+    values = c(
+      "Hector 33-67% CI" = "orange", 
+      "Hector 10-90% CI" = "grey")) +
+  
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12), # Facet label size
+    legend.position.inside = c(0.82, 0.2), # Manually position the legend
+    legend.justification = "center"
+  )
+
+plot_magicc_weighted
+
+# ggsave("figures/magicc_emulation_wide_ecs_exp_BAU.png",
+#        magicc_emulated_plot_weighted,
+#        device = "png",
+#        height = 7,
+#        width = 10,
+#        units = "in",
+#        dpi = 300)
+```
+
+## Magic emulated figure
+
+Figure showing the entire weighted/constrained ensemble:
+```{r}
+# magicc_emulated_weighted_ensemble_bau <- 
+#   ggplot() +
+#   geom_line(
+#     data = subset(gsat_data$T_01_BAU, year > 1849),
+#     aes(
+#       x = year,
+#       y = normalized_value,
+#       group = run_number,
+#       color = "Hector Ensemble (5000 member)"
+#     ),
+#     alpha = 0.4,
+#     linewidth = 0.1
+#   ) +
+#   geom_line(
+#     data = subset(gsat_data_normalized_magicc, year > 1849),
+#     aes(
+#       x = year,
+#       y = normalized_value,
+#       group = run_number,
+#       color = "Constrained Ensemble (4500 member)", 
+#       alpha = weights
+#     ),
+#     linewidth = 0.1
+#   ) +
+#   scale_alpha_continuous(range(c(0.8, 1))) + # how extreme should the transparency gradient be - this is optional
+#   guides(alpha = "none") + # remove alpha legend 
+#   # Add labels and theme
+#   labs(
+#     title = "4500-member Constrained Hector Ensemble (BAU)",
+#     x = "Year",
+#     y = "Temperature Anomaly (°C)",
+#     color = "Legend"
+#   ) +
+#   
+#   geom_line(data = obs_temp, aes(x = year, y = value, color = "Historic Temperature (one SD)")) +
+#   geom_ribbon(data = obs_temp_sd, aes(x = year, ymin = value - sd, ymax = value + sd), alpha = 0.3, fill = "navy") +
+#   
+#   # Add custom colors for the legend
+#   scale_color_manual(
+#     values = c(
+#       "Hector Ensemble (5000 member)" = "grey",
+#       "Constrained Ensemble (4500 member)" = "#31A354",
+#       "Historic Temperature (one SD)" = "navy"
+#     )
+#   ) +
+#   theme_light() +
+#   theme(
+#     plot.title = element_text(size = 16, face = "bold"),
+#     axis.title = element_text(size = 14),
+#     axis.text = element_text(size = 12),
+#     legend.title = element_text(size = 10),
+#     legend.text = element_text(size = 8),
+#     legend.position = c(0.01, 0.99),  # Use this to place the legend inside the panel
+#     legend.justification = c(0, 1), # Align legend's top-left corner
+#     legend.background = element_rect(fill = "white", color = "black")
+#   )
+# 
+# magicc_emulated_weighted_ensemble_bau
+# 
+#  ggsave("figures/constrained_magicc_emulated_ensemble_bau.png",
+#         magicc_emulated_weighted_ensemble_bau,
+#         device = "png",
+#         height = 7,
+#         width = 10,
+#         units = "in",
+#         dpi = 300)
+```
+
+Figure showing the entire weighted/constrained ensemble -- with median and range:
+```{r}
+ensemble_plot_data_magicc <- lapply(gsat_data_normalized_magicc, function(df) {
+  
+  data_subset <- subset(df, year > 1849)
+  
+  return(data_subset)
+
+})
+
+ensemble_plot_magicc_df <- do.call(rbind, ensemble_plot_data_magicc)
+
+full_magicc_emulated_ensemble_constrained <- 
+  ggplot() +
+  geom_line(
+    data = ensemble_plot_magicc_df,
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Hector Ensemble (5000 member)"
+    ),
+    alpha = 0.4,
+    linewidth = 0.1
+  ) +
+  geom_line(
+    data = ensemble_plot_magicc_df,
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Constrained Ensemble (4500 member)", 
+      alpha = weights
+    ),
+    linewidth = 0.1
+  ) +
+  scale_alpha_continuous(range(c(0.8, 1))) + # how extreme should the transparency gradient be - this is optional
+  guides(alpha = "none") + # remove alpha legend 
+  # Add labels and theme
+  labs(
+    title = "4500-member Constrained Hector Ensemble (BAU)",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  geom_line(data = obs_temp, aes(x = year, y = value, color = "Historic Temperature (one SD)")) +
+  geom_ribbon(data = obs_temp_sd, aes(x = year, ymin = value - sd, ymax = value + sd), alpha = 0.3, fill = "navy") +
+  
+  # Adding the median and CI projection
+  geom_ribbon(data = weighting_magicc_plot_df, 
+              aes(x = year, ymin = ci_05, ymax = ci_95), 
+              fill = "red", alpha = 0.2) +
+  geom_ribbon(data = weighting_magicc_plot_df, 
+              aes(x = year, ymin = ci_10, ymax = ci_90), 
+              fill = "red", alpha = 0.3) +
+  geom_ribbon(data = weighting_magicc_plot_df, 
+              aes(x = year, ymin = ci_33, ymax = ci_67), 
+              fill = 'red', alpha = 0.5) +
+  
+  # Median line
+  geom_line(data = weighting_magicc_plot_df, 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # Ou and Iyer et al. 2021 line
+  geom_line(data = ou_data, 
+            aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
+            linewidth = 0.7) +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Ensemble (5000 member)" = "grey",
+      "Constrained Ensemble (4500 member)" = "#31A354",
+      "Historic Temperature (one SD)" = "navy", 
+      "Hector Median" = "darkred",
+      "Ou and Iyer et al. 2021" = "dodgerblue"
+    )
+  ) +
+  facet_wrap(~scenario) +
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = c(0.99, 0.01),  # Use this to place the legend inside the panel
+    legend.justification = c(0, 1), # Align legend's top-left corner
+    legend.background = element_rect(fill = "white", color = "black")
+  )
+
+full_magicc_emulated_ensemble_constrained
+
+# ggsave("figures/full_magicc_emulated_ensemble_constrained.png",
+#        full_magicc_emulated_ensemble_constrained,
+#        device = "png",
+#        height = 7,
+#        width = 10,
+#        units = "in",
+#        dpi = 300)
+```
+```{r}
+scored_bau_ensemble_magicc <- 
+  ggplot() +
+  geom_line(
+    data = subset(gsat_data$T_01_BAU, year > 1849),
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Hector Ensemble (5000 member)"
+    ),
+    alpha = 0.4,
+    linewidth = 0.1
+  ) +
+  geom_line(
+    data = subset(gsat_data_normalized_magicc$T_01_BAU, year > 1849),
+    aes(
+      x = year,
+      y = normalized_value,
+      group = run_number,
+      color = "Constrained Ensemble (1500 member)" 
+    ), linewidth = 0.1, alpha = 0.3) + 
+  
+  # Adding Historic temperature observations
+  geom_line(data = obs_temp, aes(x = year, y = value, color = "Historic Temperature (one SD)")) +
+  geom_ribbon(data = obs_temp_sd, aes(x = year, ymin = value - sd, ymax = value + sd), alpha = 0.3, fill = "navy") +
+  
+  # Adding the median and CI projection
+  geom_ribbon(data = subset(weighting_magicc_plot_df, scenario == "T_01_BAU"), 
+              aes(x = year, ymin = ci_33, ymax = ci_67, alpha = "Hector 33-67%"), 
+              fill = 'red') +
+  geom_ribbon(data = subset(weighting_magicc_plot_df, scenario == "T_01_BAU"), 
+              aes(x = year, ymin = ci_10, ymax = ci_90, alpha = "Hector 10-90%"), 
+              fill = "red") +
+  geom_ribbon(data = subset(weighting_magicc_plot_df, scenario == "T_01_BAU"), 
+              aes(x = year, ymin = ci_05, ymax = ci_95, alpha = "Hector 05-95%"), 
+              fill = "red") +
+  
+  # Median line
+  geom_line(data = subset(weighting_magicc_plot_df, scenario == "T_01_BAU"), 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # add magic range
+  geom_ribbon(data = magicc_unc, 
+              aes(x = year, ymin = lower, ymax = upper, color = "MAGICC Range"), fill = NA, linetype = "dashed", linewidth = 0.7) +
+  
+    # Ou and Iyer et al. 2021 line
+  geom_line(data = subset(ou_data, scenario == "T_01_BAU"), 
+            aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
+            linewidth = 0.7) +
+  
+      # Add labels and theme
+  labs(
+    title = "1500-member MAGICC Emulation Hector Ensemble (BAU) ",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend", 
+    alpha = "Uncertainty Bounds"
+  ) +
+  
+  # Add custom colors and alpha level for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Ensemble (5000 member)" = "grey",
+      "Constrained Ensemble (1500 member)" = "#31A354",
+      "Historic Temperature (one SD)" = "navy", 
+      "Hector Median" = "darkred", 
+      "MAGICC Range" = "dodgerblue", 
+    "Ou and Iyer et al. 2021" = "dodgerblue")) +
+  scale_alpha_manual(
+    values = c(
+      "Hector 33-67%" = 0.4, 
+      "Hector 10-90%" = 0.3, 
+      "Hector 05-95%" = 0.2)) +
+  
+    # Explicitly set legend order
+  guides(
+    color = guide_legend(order = 1),  # First in legend
+    alpha = guide_legend(order = 2)   # Second in legend
+  ) +
+  
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = c(0.01, 0.99),  # Use this to place the legend inside the panel
+    legend.justification = c(0, 1), # Align legend's top-left corner
+    legend.background = element_rect(fill = "white", color = "black"), 
+    legend.spacing.y = unit(0.1, "cm")
+  )
+
+scored_bau_ensemble_magicc
+```
+
+## Define metrics of interest
+
+We define a warming metric to give us median warming in the year 2100 give the filtered Hector ensemble.
+
+```{r define metric for end of century warming}
+warming_metric <- new_metric(var = "global_tas", years = 2100, op = median)
+  
+```
+
+## Compute warming results 
+
+Using the `metric_calc` function we compute the warming results.
+```{r compute warming metrics}
+warming_results_magicc <- lapply(gsat_data_normalized_magicc, function(df) {
+  
+  metric_result <- metric_calc(df, warming_metric)
+  
+  return(metric_result)
+})
+```
+
+Now we merge the median warming values with scores which will allow us to compute probabilities while also considering how well each ensemble member performs against historical observations:
+```{r build weighted metric dfs}
+weighted_gsat_data_magicc <- Map(function(a, b) {
+  
+  merged <- merge(a, b, by = "run_number", all.x = TRUE)
+  
+  return(merged)
+  
+}, warming_results_magicc, top_magicc_scores)
+
+```
+
+We can save these results if desired:
+```{r save weighterd metric data}
+
+```
+
+## Computing probabilities 
+
+```{r computing probabilities}
+# define temperature ranges of interest -- align with Ou and Iyer et al. 2021
+temp_ranges <- c(1, 1.5, 2, 3, 4, Inf)
+
+temp_probability_magicc <- lapply(names(weighted_gsat_data_magicc), function(scenario) {
+  
+  df <- weighted_gsat_data_magicc[[scenario]]
+  
+  # run prob_calc
+  prob_results <- prob_calc(df$metric_result, 
+                            bins = temp_ranges, 
+                            scores = df$weights)
+  
+  prob_results$scenario <- scenario
+  
+  return(prob_results)
+})
+
+```
+
+Bind probability list:
+```{r}
+prob_bind_magicc <- do.call(rbind, temp_probability_magicc)
+
+prob_bind_magicc <- prob_bind_magicc %>% 
+  filter(!scenario %in% c("T_06_NDC_cont", "T_07_NDC_inc_LTS"))
+```
+
+
+```{r}
+temp_cols <- c("darkgrey","lightgrey","salmon", "#B2182B","#67001F")
+
+# order levels
+scen_order <- c("T_05_NDC_inc_LTS", "T_04_NDC_cont","T_03_CAT_crnt", "T_02_CAT_crnt", "T_01_BAU")
+prob_bind_magicc$scenario <- factor(prob_bind_magicc$scenario, levels = scen_order)
+
+probability_plot_magicc <- 
+  ggplot(data = prob_bind_magicc, # identify the data location
+         aes(
+           fill = bins, # how fill should be applied
+           x = scenario, # what data goes on the x-axis
+           y = probability)) + # what data goes on the y-axis
+  # below we will be flipping the coord of the figure so right now the axes seem 
+  # backwards from what we want.
+  geom_bar(position = position_fill(reverse = T), # what type of plot we want and reverse the 
+                                                  # stack order so cooler temps are on left
+           stat = "identity", # we want the width of the bar pieces to be constrained by a value in the data
+           width = 0.6) + # how wide do you want the bar - personal preference
+  scale_y_continuous(breaks = seq(0.0, 1.0, 0.1)) + # set the number and interval of probability breaks
+  scale_fill_manual(
+    values = temp_cols, # indicate the color palette to use
+    labels = c(         # edit labels for the legend
+      expression(paste("1.0 to 1.5", ~degree, "C")),
+      expression(paste("1.5 to 2.0", ~degree, "C")),
+      expression(paste("2.0 to 3.0", ~degree, "C")),
+      expression(paste("3.0 to 4.0", ~degree, "C")),
+      expression(paste(" > 4.0", ~degree, "C"))),
+    name = "Warming") + # name of the legend
+  labs(y = "Probability",
+       x = "Scenario", 
+       title = "Probability of Warming for MAGICC Emulation") +
+  coord_flip() + # flip the coordinates of the figure to make horizontal representation
+  theme_light() + # set theme - personal preference 
+  theme(legend.position = "bottom") # change legend position - personal preference
+
+probability_plot_magicc
+
+```
+
+
+
+
+
+
+
+## computing probabilisties
+
+```{r}
+# define metric
+warming_metric <- new_metric(var = "global_tas", years = 2100, op = median)
+
+# computing metrics 
+metric_result_emulated <- metric_calc(gsat_data_normalized_magicc, warming_metric)
+
+# merge metrics with top_scores
+top_magicc_emulated_metrics <- merge(metric_result_emulated, top_scores_magicc, by = "run_number")
+
+# define temperature ranges of interest -- align with ou and Iyer 
+temp_ranges <- c(1, 1.5, 2, 3, 4, Inf)
+
+# run prob_calc
+prob_results <- prob_calc(top_magicc_emulated_metrics$metric_result,
+                          bins = temp_ranges,
+                          scores = top_magicc_emulated_metrics$weights)
+```
+
+
+Plotting probability
+```{r}
+temp_cols <- c("lightgrey","salmon", "#B2182B","#67001F")
+
+# order levels
+prob_results$scenario <- "T_01_BAU"
+
+probability_plot <- 
+  ggplot(data = prob_results, # identify the data location
+         aes(
+           fill = bins, # how fill should be applied
+           x = scenario, # what data goes on the x-axis
+           y = probability)) + # what data goes on the y-axis
+  # below we will be flipping the coord of the figure so right now the axes seem 
+  # backwards from what we want.
+  geom_bar(position = position_fill(reverse = T), # what type of plot we want and reverse the 
+                                                  # stack order so cooler temps are on left
+           stat = "identity", # we want the width of the bar pieces to be constrained by a value in the data
+           width = 0.6) + # how wide do you want the bar - personal preference
+  scale_y_continuous(breaks = seq(0.0, 1.0, 0.1)) + # set the number and interval of probability breaks
+  scale_fill_manual(
+    values = temp_cols, # indicate the color palette to use
+    labels = c(         # edit labels for the legend
+      expression(paste("1.5 to 2.0", ~degree, "C")),
+      expression(paste("2.0 to 3.0", ~degree, "C")),
+      expression(paste("3.0 to 4.0", ~degree, "C")),
+      expression(paste(" > 4.0", ~degree, "C"))),
+    name = "Warming") + # name of the legend
+  labs(y = "Probability",
+       x = "Scenario", 
+       title = "Probability of Warming") +
+  coord_flip() + # flip the coordinates of the figure to make horizontal representation
+  theme_light() + # set theme - personal preference 
+  theme(legend.position = "bottom") # change legend position - personal preference
+
+probability_plot
+
+ggsave("figures/constrained_probability_plot.png", 
+       probability_plot,
+       device = "png",
+       dpi = 300, 
+       height = 4)
+```
+
+
+
+
+## NEED TO RUN THE ABOVE ANALYSIS ACROSS ALL SCENARIOS BEFORE RUNNING THIS PLOT
+```{r}
+weighting_plot_df_emulated <- summary_weighting_magicc %>% 
+  filter(!scenario %in% c("T_06_NDC_cont", "T_07_NDC_inc_LTS"))
+
+# load ou and Iyer data
+ou_data <- read.csv("data/raw-data/ou_Iyer_global_mean_temperature.csv")
+
+parametric_uncertainty_plot_weighted <- ggplot() +
+  # Ribbon for 10th-90th percentile
+  geom_ribbon(data = weighting_plot_df, 
+              aes(x = year, 
+                  ymin = ci_10, 
+                  ymax = ci_90), 
+              fill = "grey", alpha = 0.5) +
+  
+  # Ribbon for 33rd-67th percentile
+  geom_ribbon(data = weighting_plot_df, 
+              aes(x = year, 
+                  ymin = ci_33, 
+                  ymax = ci_67), 
+              fill = 'orange', alpha = 0.5) +
+  
+  # Median line
+  geom_line(data = weighting_plot_df, 
+            aes(x = year, y = median, color = "Hector Median"), 
+            linewidth = 0.7) +
+  
+  # Ou and Iyer et al. 2021 line
+  geom_line(data = ou_data, 
+            aes(x = year, y = value, color = "Ou and Iyer et al. 2021"), 
+            linewidth = 0.7) +
+  
+  # Facet by scenario
+  facet_wrap(~scenario) +
+  
+  # Add labels and theme
+  labs(
+    title = "Constrained/Weighted Projections",
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    color = "Legend"
+  ) +
+  
+  # Add custom colors for the legend
+  scale_color_manual(
+    values = c(
+      "Hector Median" = "black",
+      "Ou and Iyer et al. 2021" = "red"
+    )
+  ) +
+  
+  theme_light() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12), # Facet label size
+    legend.position.inside = c(0.82, 0.2), # Manually position the legend
+    legend.justification = "center"
+  )
+
+parametric_uncertainty_plot_weighted
+
+
+ggsave("emissions_projections_weighted.png", 
+       device = "png",
+       height = 7, 
+       width = 10, 
+       units = "in",
+       dpi = 300)
+```
+

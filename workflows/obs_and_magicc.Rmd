@@ -1,7 +1,7 @@
 ---
-title: "using_weighted_params"
+title: "obs_and_MAGICC"
 author: "Joe Brown"
-date: "2024-12-03"
+date: "2025-02-21"
 output: html_document
 ---
 
@@ -9,40 +9,10 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Goal
-
-The goal of this document is to run Hector with Matilda using NDC emissions scenarios. This analysis is meant to understand how the Hector + Matilda workflow can perform "ignorant" of MAGICC7 data. 
-
-We will compare Hector + Matilda results against those from MAGICC7, published in in Ou and Iyer et al. 2021.
-
-# Score model results
-
-Compute scores for the normalized ensemble members against historical temperature & CO2 data. 
-
-Load the `model_result` data if not already in global env. For this analysis you will want to load the `model_result_new_ecs.RDS`.
-
-Scoring:
-```{r score model runs}
-
-model_scores <- lapply(model_result, function(df) {
-  
-  temp_wt <- score_runs(df, criterion_temp, score_ramp, w1 = 0.01, w2 = 0.5)
-  temp_wt <- na.omit(temp_wt)
-  
-  co2_wt <- score_runs(df, criterion_co2_obs(), score_ramp, w1 = 3, w2 = 15)
-  co2_wt <- na.omit(co2_wt)
-  
-  ocean_uptake <- score_runs(df, criterion_ocean_uptake, score_ramp, w1 = 0.1, w2 = 0.8)
-  ocean_uptake <- na.omit(ocean_uptake)
-  
-  score_list <- list(temp_wt, co2_wt, ocean_uptake)
-  
-  mc_score <- multi_criteria_weighting(score_list)
-  
-  return(mc_score)
-})
-
+```{r}
+combined_score <- 
 ```
+
 
 Result is a list with each element corresponding to an emissions scenario. The data frames stored in each element contains scores for each ensemble member. Scores are computed using `score_ramp`. This function provides a score based on used defined "bounds" (w1 and w2). Ensemble members with an average abs difference < w1 are assigned a score of 1, indicating it is essentially equal to the observed data it is being scored against. Ensemble members with an average abs difference > w2 are assigned a score of 0, indicating the ensemble member is too different from the observed data to be considered reliable. All members between the w1-w2 bounds are scored whereby scores decrease linearly as the average abs difference increases.
 
@@ -513,10 +483,3 @@ probability_plot
 #        dpi = 300, 
 #        height = 4)
 ```
-
-# NOTES
-Still a lot of uncertainty in the results. This high amount of uncertainty results in differences in probabilities of warming. 
-
-Why is it that in order to get median and bounds that are consistent with magicc, there is still a high probability of low warming? the only thing I can think of is that there is too much uncertainty in the result. This is most probably driven by the new ECS distribution being used. 
-
-So, what happens if I try this again with the old ECS distribution using the `score_ramp()` method? Will this produce a more desirable result? or will it take altering the ECS distribution again? If there is enough uncertainty with the default ECS distribution then using score ramp on a defult Hector ensemble might work. It would just be a matter of tuning with `score_ramp()` and the percentage of runs being filtered.
